@@ -6,6 +6,18 @@ and manage preview images — all from a clean web UI.
 
 > Frontend: HTML / CSS / vanilla JS · Backend: Python (Flask)
 
+## Screenshots / 畫面
+
+| Library — browse characters / 圖庫瀏覽 | Character & models / 角色與模型 |
+| :---: | :---: |
+| ![Library](docs/01-library.png) | ![Character](docs/02-character.png) |
+
+| Settings — game libraries / 設定（兩欄式） |
+| :---: |
+| ![Settings](docs/03-settings.png) |
+
+> Demo data uses official character art for previews. / 示意畫面以官方角色立繪作為預覽。
+
 ---
 
 ## English
