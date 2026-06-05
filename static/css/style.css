@@ -333,6 +333,24 @@ body {
 .char-detail-head .cd-meta h2 { font-size: 22px; }
 .char-detail-head .cd-sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
 .char-detail-head .cd-sub .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.char-detail-head .cd-sub .cd-outfit { color: var(--primary); font-weight: 600; }
+
+/* outfit / skin switcher */
+.outfit-switcher { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.outfit-card {
+  width: 116px; padding: 0; border: 2px solid var(--line); background: var(--panel);
+  border-radius: 12px; overflow: hidden; cursor: pointer; text-align: left;
+  transition: border-color .15s, transform .12s;
+}
+.outfit-card:hover { transform: translateY(-3px); border-color: var(--line-2); }
+.outfit-card.active { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.outfit-card .oc-img { width: 100%; aspect-ratio: 3/4; background: #0a0d18; overflow: hidden; }
+.outfit-card .oc-img img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+.outfit-card .oc-name {
+  padding: 7px 9px; font-size: 12px; font-weight: 600; line-height: 1.25;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 2.6em;
+}
+.outfit-card.active .oc-name { color: #fff; }
 
 .model-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
 .modal .model-list { padding: 18px; overflow-y: auto; }

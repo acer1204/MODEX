@@ -14,7 +14,8 @@ const state = {
   facets: [],           // active game's facet metadata
   filters: {},          // { facetKey: Set(values) }
   search: "",
-  edit: null,           // { gid, character, folder } when in edit view
+  edit: null,           // { gid, character, folder, outfit } when in edit view
+  outfit: "Official",   // current outfit/skin on the character detail page
   lang: "en",           // current language code
   locale: null,         // loaded translation object
   locales: [],          // available [{code, name}]
@@ -109,7 +110,8 @@ function pushRoute(route) {
   if (navLock) return;
   const cur = navHist.stack[navHist.idx];
   if (cur && cur.view === route.view && cur.gameId === route.gameId &&
-      cur.character === route.character && cur.folder === route.folder) return; // no dup
+      cur.character === route.character && cur.folder === route.folder &&
+      cur.outfit === route.outfit) return; // no dup
   navHist.stack = navHist.stack.slice(0, navHist.idx + 1); // drop forward entries
   navHist.stack.push(route);
   navHist.idx = navHist.stack.length - 1;
@@ -121,7 +123,7 @@ function applyRoute(route) {
   else if (route.view === "settings") showSettings();
   else if (route.view === "library") openLibrary(route.gameId);
   else if (route.view === "character") openCharacter(route.gameId, route.character);
-  else if (route.view === "edit") openEditModel(route.gameId, route.character, route.folder);
+  else if (route.view === "edit") openEditModel(route.gameId, route.character, route.folder, route.outfit);
   navLock = false;
 }
 function navBack() {
@@ -451,6 +453,8 @@ async function openCharacter(gid, charName) {
     .filter(Boolean).join(" · ");
   const iconSrc = ch.icon ? `/icons/${gid}/${encodeURIComponent(ch.icon)}` : (ch.icon_url || "");
 
+  state.outfit = "Official";   // reset to the default outfit on entry
+
   const c = $("#content");
   c.innerHTML = `
     <div class="char-detail-head">
@@ -460,17 +464,56 @@ async function openCharacter(gid, charName) {
       </button>` : ""}
       <div class="cd-meta">
         <h2>${tChar(ch.name)}</h2>
-        <div class="cd-sub">${ch.element ? `<span class="dot" style="background:${dot}"></span>` : ""}${meta || t("ui.models")}</div>
+        <div class="cd-sub">${ch.element ? `<span class="dot" style="background:${dot}"></span>` : ""}${meta || t("ui.models")}<span class="cd-outfit" id="cdOutfit"></span></div>
       </div>
     </div>
+    <div class="outfit-switcher hidden" id="outfitSwitcher"></div>
     <div class="model-list" id="modelGrid"><div class="model-empty">${t("ui.loading")}</div></div>`;
 
   const openBtn = $("#cdOpenFolder");
-  if (openBtn) openBtn.addEventListener("click", () => openCharacterFolder(gid, charName));
+  if (openBtn) openBtn.addEventListener("click", () => openCharacterFolder(gid, charName, state.outfit));
 
-  const box = $("#modelGrid");
+  // outfit switcher (Official + alternate skins)
   try {
-    const data = await api(`/api/games/${gid}/models?character=${encodeURIComponent(charName)}`);
+    const od = await api(`/api/games/${gid}/outfits?character=${encodeURIComponent(charName)}`);
+    if (od.has_skins) renderOutfitSwitcher(gid, charName, od.outfits);
+  } catch (_) {}
+
+  renderOutfitModels(gid, charName);
+}
+
+function renderOutfitSwitcher(gid, charName, outfits) {
+  const bar = $("#outfitSwitcher");
+  if (!bar) return;
+  bar.classList.remove("hidden");
+  bar.innerHTML = "";
+  outfits.forEach((o) => {
+    const card = el("button", "outfit-card" + (o.folder === state.outfit ? " active" : ""));
+    card.dataset.folder = o.folder;
+    const label = o.folder === "Official" ? t("ui.officialOutfit") : o.name;
+    card.innerHTML = `<div class="oc-img">${o.image_url ? `<img src="${o.image_url}" alt="${o.name}">` : ""}</div>
+      <div class="oc-name" title="${o.name}">${label}</div>`;
+    card.addEventListener("click", () => {
+      if (state.outfit === o.folder) return;
+      state.outfit = o.folder;
+      $$("#outfitSwitcher .outfit-card").forEach((x) => x.classList.remove("active"));
+      card.classList.add("active");
+      renderOutfitModels(gid, charName);
+    });
+    bar.appendChild(card);
+  });
+}
+
+async function renderOutfitModels(gid, charName) {
+  const box = $("#modelGrid");
+  if (!box) return;
+  const outfit = state.outfit;
+  // show current outfit label next to the character name
+  const lbl = $("#cdOutfit");
+  if (lbl) lbl.textContent = outfit && outfit !== "Official" ? ` · ${outfit}` : ` · ${t("ui.officialOutfit")}`;
+  box.innerHTML = `<div class="model-empty">${t("ui.loading")}</div>`;
+  try {
+    const data = await api(`/api/games/${gid}/models?character=${encodeURIComponent(charName)}&outfit=${encodeURIComponent(outfit)}`);
     if (!data.char_dir_exists) {
       box.innerHTML = `<div class="model-empty">${t("ui.noCharDir")}</div>`; return;
     }
@@ -478,27 +521,28 @@ async function openCharacter(gid, charName) {
       box.innerHTML = `<div class="model-empty">${t("ui.noModels")}</div>`; return;
     }
     box.innerHTML = "";
-    data.models.forEach((m) => box.appendChild(modelCard(gid, charName, m)));
+    data.models.forEach((m) => box.appendChild(modelCard(gid, charName, m, outfit)));
   } catch (e) {
     box.innerHTML = `<div class="model-empty">❌ ${e.message}</div>`;
   }
 }
 
-async function openCharacterFolder(gid, character) {
+async function openCharacterFolder(gid, character, outfit) {
   try {
     const data = await api(`/api/games/${gid}/open-folder`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ character }),
+      body: JSON.stringify({ character, outfit: outfit || "Official" }),
     });
     toast(t("ui.folderOpened", { path: data.path }), "ok", 4000);
   } catch (e) { toast(`❌ ${e.message}`, "err", 5000); }
 }
 
-function mediaUrl(gid, character, folder, file) {
-  return `/api/games/${gid}/media?character=${encodeURIComponent(character)}&model=${encodeURIComponent(folder)}&file=${encodeURIComponent(file)}`;
+function mediaUrl(gid, character, folder, file, outfit) {
+  return `/api/games/${gid}/media?character=${encodeURIComponent(character)}&outfit=${encodeURIComponent(outfit || "Official")}&model=${encodeURIComponent(folder)}&file=${encodeURIComponent(file)}`;
 }
 
-function modelCard(gid, character, model) {
+function modelCard(gid, character, model, outfit) {
+  outfit = outfit || "Official";
   const card = el("div", "model-card" + (model.enabled ? " enabled" : " disabled"));
   const preview = el("div", "preview");
   const previews = model.previews || [];
@@ -516,7 +560,7 @@ function modelCard(gid, character, model) {
       tag.textContent = ""; counter.textContent = ""; return;
     }
     const p = previews[idx];
-    const src = mediaUrl(gid, character, model.folder, p.file);
+    const src = mediaUrl(gid, character, model.folder, p.file, outfit);
     let node;
     if (p.kind === "video") {
       node = el("video"); node.src = src; node.controls = true; node.loop = true; node.muted = true; node.autoplay = true;
@@ -547,13 +591,13 @@ function modelCard(gid, character, model) {
   const tgl = el("button", `mbtn toggle ${model.enabled ? "on" : "off"}`,
     model.enabled ? `⏻ ${t("ui.active")}` : `⏻ ${t("ui.disabled")}`);
   tgl.title = model.enabled ? t("ui.toggleDisableTip") : t("ui.toggleEnableTip");
-  tgl.addEventListener("click", () => toggleModel(gid, character, model));
+  tgl.addEventListener("click", () => toggleModel(gid, character, model, outfit));
 
   const keys = el("button", "mbtn keys", `⌨ ${t("ui.hotkeys")}`);
-  keys.addEventListener("click", (e) => { e.stopPropagation(); showHotkeys(gid, character, model, keys); });
+  keys.addEventListener("click", (e) => { e.stopPropagation(); showHotkeys(gid, character, model, keys, outfit); });
 
   const edit = el("button", "mbtn edit", `✏️ ${t("ui.edit")}`);
-  edit.addEventListener("click", () => openEditModel(gid, character, model.folder));
+  edit.addEventListener("click", () => openEditModel(gid, character, model.folder, outfit));
 
   actions.appendChild(tgl); actions.appendChild(keys); actions.appendChild(edit);
   card.appendChild(actions);
@@ -562,14 +606,15 @@ function modelCard(gid, character, model) {
   return card;
 }
 
-async function toggleModel(gid, character, model) {
+async function toggleModel(gid, character, model, outfit) {
+  outfit = outfit || "Official";
   try {
     await api(`/api/games/${gid}/model/toggle`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ character, folder: model.folder, enable: !model.enabled }),
+      body: JSON.stringify({ character, outfit, folder: model.folder, enable: !model.enabled }),
     });
     toast(model.enabled ? t("ui.modelDisabled") : t("ui.modelEnabled"), "ok");
-    openCharacter(gid, character); // re-render with fresh states (no extra history)
+    renderOutfitModels(gid, character); // re-render current outfit (keeps switcher)
   } catch (e) { toast(`❌ ${e.message}`, "err"); }
 }
 
@@ -597,7 +642,8 @@ function positionPopover(pop, anchor) {
   pop.style.left = Math.max(10, left) + "px";
   pop.style.top = top + "px";
 }
-async function showHotkeys(gid, character, model, anchor) {
+async function showHotkeys(gid, character, model, anchor, outfit) {
+  outfit = outfit || "Official";
   if (hotkeyPopover && hotkeyPopover.dataset.folder === model.folder) { closeHotkeyPopover(); return; }
   closeHotkeyPopover();
   const pop = el("div", "hotkey-popover");
@@ -609,7 +655,7 @@ async function showHotkeys(gid, character, model, anchor) {
   hotkeyPopover = pop;
   positionPopover(pop, anchor);
   try {
-    const data = await api(`/api/games/${gid}/model/hotkeys?character=${encodeURIComponent(character)}&folder=${encodeURIComponent(model.folder)}`);
+    const data = await api(`/api/games/${gid}/model/hotkeys?character=${encodeURIComponent(character)}&outfit=${encodeURIComponent(outfit)}&folder=${encodeURIComponent(model.folder)}`);
     pop.querySelector(".hk-ini").textContent = data.ini ? `· ${data.ini}` : "";
     const body = pop.querySelector(".hk-body");
     if (!data.hotkeys.length) {
@@ -636,11 +682,13 @@ function extFromType(t) {
   return ({ "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp", "image/bmp": ".bmp", "video/mp4": ".mp4", "video/webm": ".webm" })[t] || ".png";
 }
 
-async function openEditModel(gid, character, folder) {
-  pushRoute({ view: "edit", gameId: gid, character, folder });
+async function openEditModel(gid, character, folder, outfit) {
+  outfit = outfit || "Official";
+  pushRoute({ view: "edit", gameId: gid, character, folder, outfit });
   state.view = "edit";
   state.gameId = gid;
-  state.edit = { gid, character, folder };
+  state.outfit = outfit;
+  state.edit = { gid, character, folder, outfit };
   closeHotkeyPopover();
   $("#filterbar").classList.add("hidden");
   highlightNav();
@@ -665,7 +713,7 @@ async function openEditModel(gid, character, folder) {
   $("#fileInput").addEventListener("change", (e) => uploadFiles([...e.target.files]));
 
   try {
-    const data = await api(`/api/games/${gid}/models?character=${encodeURIComponent(character)}`);
+    const data = await api(`/api/games/${gid}/models?character=${encodeURIComponent(character)}&outfit=${encodeURIComponent(outfit)}`);
     const m = (data.models || []).find((x) => x.folder === folder);
     renderEditPreviews(m ? m.previews : []);
   } catch (e) {
@@ -677,7 +725,7 @@ let dragFile = null;
 function renderEditPreviews(previews) {
   const grid = $("#editGrid");
   if (!grid || !state.edit) return;
-  const { gid, character, folder } = state.edit;
+  const { gid, character, folder, outfit } = state.edit;
   state.edit.previews = previews.slice();
   grid.innerHTML = "";
   if (!previews.length) {
@@ -688,7 +736,7 @@ function renderEditPreviews(previews) {
     const item = el("div", "edit-item");
     item.draggable = true;
     item.dataset.file = p.file;
-    const src = mediaUrl(gid, character, folder, p.file);
+    const src = mediaUrl(gid, character, folder, p.file, outfit);
     const media = p.kind === "video"
       ? `<video src="${src}" muted loop></video>`
       : `<img src="${src}" alt="${p.file}">`;
@@ -736,11 +784,11 @@ function movePreview(srcFile, targetFile) {
 }
 
 async function persistOrder(order) {
-  const { gid, character, folder } = state.edit;
+  const { gid, character, folder, outfit } = state.edit;
   try {
     const data = await api(`/api/games/${gid}/model/preview/reorder`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ character, folder, order }),
+      body: JSON.stringify({ character, outfit, folder, order }),
     });
     renderEditPreviews(data.previews);
     toast(t("ui.reorderOk"), "ok", 2000);
@@ -750,9 +798,10 @@ async function persistOrder(order) {
 async function uploadFiles(files) {
   files = (files || []).filter(Boolean);
   if (!files.length || !state.edit) return;
-  const { gid, character, folder } = state.edit;
+  const { gid, character, folder, outfit } = state.edit;
   const fd = new FormData();
   fd.append("character", character);
+  fd.append("outfit", outfit || "Official");
   fd.append("folder", folder);
   files.forEach((f, i) => {
     const name = (f.name && f.name !== "image.png")
@@ -771,11 +820,11 @@ async function uploadFiles(files) {
 
 async function deletePreview(file) {
   if (!state.edit) return;
-  const { gid, character, folder } = state.edit;
+  const { gid, character, folder, outfit } = state.edit;
   try {
     const data = await api(`/api/games/${gid}/model/preview/delete`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ character, folder, file }),
+      body: JSON.stringify({ character, outfit, folder, file }),
     });
     toast(t("ui.deletedFile", { file }), "ok");
     renderEditPreviews(data.previews);

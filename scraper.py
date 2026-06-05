@@ -181,6 +181,108 @@ def scrape(icon_dir: str, progress=None):
     return characters
 
 
+# --------------------------------------------------------------------------- #
+#  Character outfits (alternate skins)
+# --------------------------------------------------------------------------- #
+OUTFIT_PAGE = "Character Outfit"
+
+
+def _fetch_parse(page, prop="text"):
+    params = {"action": "parse", "page": page, "prop": prop,
+              "format": "json", "formatversion": "2", "redirects": "1"}
+    r = requests.get(API_URL, params=params, headers=HEADERS, timeout=60)
+    r.raise_for_status()
+    return r.json().get("parse", {}).get(prop)
+
+
+def _wish_image_url(outfit_name, character):
+    """Find the outfit's 'Full Wish' splash from its page gallery; return URL."""
+    try:
+        wt = _fetch_parse(outfit_name, "wikitext") or ""
+    except Exception:
+        return None
+    gal = re.search(r"<gallery[^>]*>(.*?)</gallery>", wt, re.S | re.I)
+    files = []
+    if gal:
+        for line in gal.group(1).splitlines():
+            line = line.strip()
+            if line and not line.startswith("|"):
+                fn = line.split("|")[0].strip()
+                if fn:
+                    files.append(fn)
+    pick = next((f for f in files if "wish" in f.lower()), None) or (files[0] if files else None)
+    if not pick:
+        return None
+    try:
+        params = {"action": "query", "titles": "File:" + pick, "prop": "imageinfo",
+                  "iiprop": "url", "format": "json", "formatversion": "2"}
+        pages = requests.get(API_URL, params=params, headers=HEADERS, timeout=60).json().get("query", {}).get("pages", [])
+        if pages and "imageinfo" in pages[0]:
+            return pages[0]["imageinfo"][0]["url"]
+    except Exception:
+        pass
+    return None
+
+
+def parse_outfits(html):
+    """Return [{name, character, type, icon_url}] from the outfit list tables."""
+    soup = BeautifulSoup(html, "lxml")
+    outfits = []
+    for tbl in soup.find_all("table"):
+        rows = tbl.find_all("tr")
+        if not rows:
+            continue
+        hdr = [th.get_text(strip=True) for th in rows[0].find_all(["th", "td"])]
+        if hdr[:4] != ["Icon", "Name", "Quality", "Character"]:
+            continue
+        for r in rows[1:]:
+            c = r.find_all("td", recursive=False)
+            if len(c) < 5:
+                continue
+            outfits.append({
+                "name": c[1].get_text(strip=True),
+                "character": c[3].get_text(strip=True),
+                "type": c[4].get_text(strip=True),
+                "icon_url": _clean_icon_url(_img_src(c[0].find("img"))),
+            })
+    return outfits
+
+
+def scrape_outfits(image_dir, progress=None):
+    """Build {character: [{name, folder, type, image}]} for non-default outfits
+    (themed / alternate skins), downloading each skin's wish art locally."""
+    def log(msg):
+        if progress:
+            progress(msg)
+
+    log("Fetching character outfits from Fandom API ...")
+    outfits = parse_outfits(_fetch_parse(OUTFIT_PAGE, "text"))
+    skins = [o for o in outfits if o["type"].lower() != "default"]
+    log(f"Found {len(skins)} alternate outfits. Downloading wish art ...")
+
+    os.makedirs(image_dir, exist_ok=True)
+    result = {}
+    for i, o in enumerate(skins, 1):
+        url = _wish_image_url(o["name"], o["character"]) or o["icon_url"]
+        fname = safe_filename(o["character"] + " - " + o["name"]) + ".png"
+        dest = os.path.join(image_dir, fname)
+        if not _icon_ok(dest):
+            download_icon(url, dest)
+        entry = {
+            "name": o["name"],
+            "folder": safe_filename(o["name"]),
+            "type": o["type"],
+            "image": fname if _icon_ok(dest) else None,
+            "image_url": url,
+        }
+        result.setdefault(o["character"], []).append(entry)
+        if i % 5 == 0:
+            log(f"  outfits {i}/{len(skins)}")
+
+    log(f"Done. {len(result)} characters have alternate outfits.")
+    return result
+
+
 if __name__ == "__main__":
     # quick manual test
     here = os.path.dirname(os.path.abspath(__file__))

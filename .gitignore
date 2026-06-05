@@ -8,6 +8,7 @@ venv/
 # MODEX runtime data (user-specific config + regenerable caches)
 data/
 static/icons/
+static/outfits/
 
 # Local dev helpers (screenshot / locale generators + their temp data)
 /_*

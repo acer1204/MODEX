@@ -35,8 +35,10 @@ Demo data uses official character art for previews.<br>
   **快捷鍵** — 讀取模型的 `.ini`，以懸浮視窗列出每個 `[Key…]`（按鍵 + 類型 + 段數）。
 - **Edit previews** — add (upload or `Ctrl+V` paste), delete, and **drag to reorder** images / GIFs / videos. The first image is the cover.<br>
   **編輯預覽** — 新增（上傳或 `Ctrl+V` 貼上）、刪除、**拖曳調整順序**，第一張為封面。
-- **Open folder** — click a character's avatar to open its mod folder in the OS file explorer.<br>
-  **開啟資料夾** — 點角色頭像即以系統檔案總管開啟其 mod 資料夾。
+- **Open folder** — click a character's avatar to open the current outfit's mod folder in the OS file explorer.<br>
+  **開啟資料夾** — 點角色頭像即以系統檔案總管開啟目前外觀對應的 mod 資料夾。
+- **Outfits / skins** — characters with alternate outfits get an outfit switcher (with the official wish art); switch between Official and each skin to manage its own mods. Layout: `<Character>/Official/<models>` and `<Character>/<SkinName>/<models>`.<br>
+  **外觀 / 限定 skin** — 有限定外觀的角色會出現外觀切換器（附官方 wish 立繪），可在「官方」與各 skin 間切換、各自管理 mod。結構：`<角色>/Official/<模型>` 與 `<角色>/<SkinName>/<模型>`。
 - **Multi-game ready** — games are registered in `SUPPORTED_GAMES` in `app.py`; currently ships with Genshin Impact.<br>
   **多遊戲架構** — 遊戲註冊在 `app.py` 的 `SUPPORTED_GAMES`，目前內建原神（Genshin Impact）。
 - **Offline-friendly** — character icons are downloaded locally on refresh, so browsing works without a connection.<br>

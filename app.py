@@ -27,9 +27,11 @@ import scraper
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")
 ICON_ROOT = os.path.join(HERE, "static", "icons")
+OUTFIT_ROOT = os.path.join(HERE, "static", "outfits")
 LOCALES_DIR = os.path.join(HERE, "locales")
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 DEFAULT_LANG = "en"
+OFFICIAL = "Official"   # default outfit name / its subfolder
 
 PREVIEW_EXT = {
     "image": {".png", ".jpg", ".jpeg", ".webp", ".bmp"},
@@ -55,12 +57,14 @@ SUPPORTED_GAMES = {
             {"key": "region", "label": "地區", "kind": "tag"},
         ],
         "scraper": scraper.scrape,
+        "outfit_scraper": scraper.scrape_outfits,
     },
 }
 
 app = Flask(__name__)
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(ICON_ROOT, exist_ok=True)
+os.makedirs(OUTFIT_ROOT, exist_ok=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -110,8 +114,16 @@ def characters_path(gid):
     return os.path.join(DATA_DIR, f"characters_{gid}.json")
 
 
+def outfits_path(gid):
+    return os.path.join(DATA_DIR, f"outfits_{gid}.json")
+
+
 def icon_dir(gid):
     return os.path.join(ICON_ROOT, gid)
+
+
+def outfit_img_dir(gid):
+    return os.path.join(OUTFIT_ROOT, gid)
 
 
 def media_kind(filename):
@@ -201,12 +213,16 @@ def _previews_of(model_path: str):
     return [{"file": f, "kind": media_kind(f)} for f in _apply_order(model_path, _list_media(model_path))]
 
 
-def list_models(char_dir: str):
-    """Return the model folders under a character dir with display info."""
+def list_models(char_dir: str, exclude=None):
+    """Return the model folders under a directory with display info.
+    ``exclude`` = set of folder names to skip (e.g. outfit subfolders)."""
+    exclude = {e.lower() for e in (exclude or set())}
     models = []
     for entry in sorted(os.listdir(char_dir), key=lambda n: strip_disabled(n).lower()):
         model_path = os.path.join(char_dir, entry)
         if not os.path.isdir(model_path):
+            continue
+        if strip_disabled(entry).lower() in exclude:
             continue
         previews = _previews_of(model_path)
         models.append(
@@ -403,6 +419,13 @@ def api_game_refresh(gid):
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 502
     save_json(characters_path(gid), chars)
+    # alternate outfits / skins (best-effort — don't fail the whole refresh)
+    if g.get("outfit_scraper"):
+        try:
+            outfits = g["outfit_scraper"](outfit_img_dir(gid))
+            save_json(outfits_path(gid), outfits)
+        except Exception:
+            pass
     return jsonify({"ok": True, "count": len(chars), "game": public_game(gid)})
 
 
@@ -462,16 +485,51 @@ def _resolve_char_dir(gid, character):
     return char_dir, None
 
 
+def _skin_folders(gid, character):
+    """Lowercased set of a character's skin folder names + 'official'."""
+    names = {OFFICIAL.lower()}
+    for s in load_json(outfits_path(gid), {}).get(character, []):
+        names.add(str(s.get("folder", "")).lower())
+        names.add(str(s.get("name", "")).lower())
+    return {n for n in names if n}
+
+
+def _resolve_outfit_dir(gid, character, outfit):
+    """Return (outfit_dir, exclude_set, error_response).
+
+    Outfit folder layout (chosen): <char>/Official/<models> and
+    <char>/<SkinName>/<models>. For backward compatibility, the Official
+    outfit falls back to model folders directly under <char> (excluding any
+    skin subfolders) when no Official/ subfolder exists.
+    """
+    char_dir, err = _resolve_char_dir(gid, character)
+    if err:
+        return None, None, err
+    outfit = outfit or OFFICIAL
+    if outfit == OFFICIAL:
+        off = _safe_join(char_dir, OFFICIAL)
+        if os.path.isdir(off):
+            return off, set(), None
+        return char_dir, _skin_folders(gid, character), None
+    return _safe_join(char_dir, scraper.safe_filename(outfit)), set(), None
+
+
 @app.route("/api/games/<gid>/models")
 def api_game_models(gid):
     require_game(gid)
     character = request.args.get("character", "")
+    outfit = request.args.get("outfit", OFFICIAL)
     char_dir, err = _resolve_char_dir(gid, character)
     if err:
         return err
     if not os.path.isdir(char_dir):
         return jsonify({"ok": True, "models": [], "char_dir_exists": False})
-    return jsonify({"ok": True, "models": list_models(char_dir), "char_dir_exists": True})
+    odir, exclude, err2 = _resolve_outfit_dir(gid, character, outfit)
+    if err2:
+        return err2
+    if not os.path.isdir(odir):
+        return jsonify({"ok": True, "models": [], "char_dir_exists": True})
+    return jsonify({"ok": True, "models": list_models(odir, exclude), "char_dir_exists": True})
 
 
 @app.route("/api/games/<gid>/model/toggle", methods=["POST"])
@@ -479,21 +537,25 @@ def api_model_toggle(gid):
     require_game(gid)
     data = request.get_json(force=True, silent=True) or {}
     character = data.get("character", "")
+    outfit = data.get("outfit", OFFICIAL)
     folder = data.get("folder", "")
     enable = bool(data.get("enable"))
 
-    char_dir, err = _resolve_char_dir(gid, character)
+    odir, exclude, err = _resolve_outfit_dir(gid, character, outfit)
     if err:
         return err
-    if not os.path.isdir(char_dir):
+    if not os.path.isdir(odir):
         return jsonify({"ok": False, "error": "角色資料夾不存在"}), 404
 
+    exc_l = {e.lower() for e in exclude}
     target_base = strip_disabled(folder)
-    for entry in os.listdir(char_dir):
-        path = os.path.join(char_dir, entry)
+    for entry in os.listdir(odir):
+        path = os.path.join(odir, entry)
         if not os.path.isdir(path):
             continue
         ebase = strip_disabled(entry)
+        if ebase.lower() in exc_l:   # don't touch sibling skin folders
+            continue
         if enable:
             # exactly one active: target on, every sibling off
             want_enabled = (ebase == target_base)
@@ -502,25 +564,26 @@ def api_model_toggle(gid):
             want_enabled = is_enabled(entry) if ebase != target_base else False
         desired = ebase if want_enabled else DISABLED_PREFIX + ebase
         if desired != entry:
-            dst = os.path.join(char_dir, desired)
+            dst = os.path.join(odir, desired)
             if not os.path.exists(dst):
                 try:
                     os.rename(path, dst)
-                except OSError as exc:
-                    return jsonify({"ok": False, "error": f"無法重新命名「{entry}」：{exc}"}), 500
+                except OSError as exc_e:
+                    return jsonify({"ok": False, "error": f"無法重新命名「{entry}」：{exc_e}"}), 500
 
-    return jsonify({"ok": True, "models": list_models(char_dir)})
+    return jsonify({"ok": True, "models": list_models(odir, exclude)})
 
 
 @app.route("/api/games/<gid>/model/hotkeys")
 def api_model_hotkeys(gid):
     require_game(gid)
     character = request.args.get("character", "")
+    outfit = request.args.get("outfit", OFFICIAL)
     folder = request.args.get("folder", "")
-    char_dir, err = _resolve_char_dir(gid, character)
+    odir, _exc, err = _resolve_outfit_dir(gid, character, outfit)
     if err:
         return err
-    model_path = _safe_join(char_dir, folder)
+    model_path = _safe_join(odir, folder)
     if not os.path.isdir(model_path):
         return jsonify({"ok": False, "error": "模型資料夾不存在"}), 404
     ini = find_main_ini(model_path)
@@ -540,17 +603,18 @@ def api_preview_delete(gid):
     require_game(gid)
     data = request.get_json(force=True, silent=True) or {}
     character, folder, fname = data.get("character", ""), data.get("folder", ""), data.get("file", "")
-    char_dir, err = _resolve_char_dir(gid, character)
+    outfit = data.get("outfit", OFFICIAL)
+    odir, _exc, err = _resolve_outfit_dir(gid, character, outfit)
     if err:
         return err
-    path = _safe_join(char_dir, folder, fname)
+    path = _safe_join(odir, folder, fname)
     if not os.path.isfile(path) or not media_kind(fname):
         return jsonify({"ok": False, "error": "檔案不存在"}), 404
     try:
         os.remove(path)
     except OSError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
-    model_path = _safe_join(char_dir, folder)
+    model_path = _safe_join(odir, folder)
     return jsonify({"ok": True, "previews": _previews_of(model_path)})
 
 
@@ -559,13 +623,14 @@ def api_preview_upload(gid):
     require_game(gid)
     character = request.form.get("character", "")
     folder = request.form.get("folder", "")
-    char_dir, err = _resolve_char_dir(gid, character)
+    outfit = request.form.get("outfit", OFFICIAL)
+    odir, _exc, err = _resolve_outfit_dir(gid, character, outfit)
     if err:
         return err
     if not folder:
         return jsonify({"ok": False, "error": "缺少模型資料夾"}), 400
-    model_path = _safe_join(char_dir, folder)
-    if not os.path.isdir(model_path) or os.path.abspath(model_path) == os.path.abspath(char_dir):
+    model_path = _safe_join(odir, folder)
+    if not os.path.isdir(model_path) or os.path.abspath(model_path) == os.path.abspath(odir):
         return jsonify({"ok": False, "error": "模型資料夾不存在"}), 404
 
     files = request.files.getlist("file")
@@ -590,14 +655,15 @@ def api_preview_reorder(gid):
     require_game(gid)
     data = request.get_json(force=True, silent=True) or {}
     character, folder = data.get("character", ""), data.get("folder", "")
+    outfit = data.get("outfit", OFFICIAL)
     order = data.get("order", [])
-    char_dir, err = _resolve_char_dir(gid, character)
+    odir, _exc, err = _resolve_outfit_dir(gid, character, outfit)
     if err:
         return err
     if not folder:
         return jsonify({"ok": False, "error": "缺少模型資料夾"}), 400
-    model_path = _safe_join(char_dir, folder)
-    if not os.path.isdir(model_path) or os.path.abspath(model_path) == os.path.abspath(char_dir):
+    model_path = _safe_join(odir, folder)
+    if not os.path.isdir(model_path) or os.path.abspath(model_path) == os.path.abspath(odir):
         return jsonify({"ok": False, "error": "模型資料夾不存在"}), 404
     # keep only names that are real media files in this folder
     media = set(_list_media(model_path))
@@ -717,29 +783,30 @@ def api_open_folder(gid):
     require_game(gid)
     data = request.get_json(force=True, silent=True) or {}
     character = data.get("character", "")
-    char_dir, err = _resolve_char_dir(gid, character)
+    outfit = data.get("outfit", OFFICIAL)
+    odir, _exc, err = _resolve_outfit_dir(gid, character, outfit)
     if err:
         return err
-    if not os.path.isdir(char_dir):
-        return jsonify({"ok": False, "error": "角色資料夾不存在，請先在設定產生角色資料夾"}), 404
+    if not os.path.isdir(odir):
+        return jsonify({"ok": False, "error": "資料夾不存在，請先建立該外觀的資料夾"}), 404
     try:
-        open_in_explorer(char_dir)
+        open_in_explorer(odir)
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "path": char_dir})
+    return jsonify({"ok": True, "path": odir})
 
 
 @app.route("/api/games/<gid>/media")
 def api_game_media(gid):
     require_game(gid)
     character = request.args.get("character", "")
+    outfit = request.args.get("outfit", OFFICIAL)
     model = request.args.get("model", "")
     fname = request.args.get("file", "")
-    cfg = get_config()
-    folder = game_cfg(cfg, gid).get("mods_folder", "")
-    if not folder or not os.path.isdir(folder):
+    odir, _exc, err = _resolve_outfit_dir(gid, character, outfit)
+    if err or not odir or not os.path.isdir(odir):
         abort(404)
-    path = _safe_join(folder, scraper.safe_filename(character), model, fname)
+    path = _safe_join(odir, model, fname)
     if not os.path.isfile(path):
         abort(404)
     mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
@@ -750,6 +817,36 @@ def api_game_media(gid):
 def icons(gid, filename):
     require_game(gid)
     return send_from_directory(icon_dir(gid), filename)
+
+
+@app.route("/outfits/<gid>/<path:filename>")
+def outfit_images(gid, filename):
+    require_game(gid)
+    return send_from_directory(outfit_img_dir(gid), filename)
+
+
+@app.route("/api/games/<gid>/outfits")
+def api_game_outfits(gid):
+    """Return [Official] + alternate skins for a character (display + image)."""
+    require_game(gid)
+    character = request.args.get("character", "")
+    skins = load_json(outfits_path(gid), {}).get(character, [])
+
+    chars = load_json(characters_path(gid), [])
+    ch = next((c for c in chars if c.get("name") == character), None)
+    official_img = None
+    if ch:
+        official_img = (f"/icons/{gid}/{ch['icon']}" if ch.get("icon") else ch.get("icon_url"))
+
+    outfits = [{"name": OFFICIAL, "folder": OFFICIAL, "type": "Default", "image_url": official_img}]
+    for s in skins:
+        outfits.append({
+            "name": s["name"],
+            "folder": s["folder"],
+            "type": s.get("type"),
+            "image_url": (f"/outfits/{gid}/{s['image']}" if s.get("image") else s.get("image_url")),
+        })
+    return jsonify({"ok": True, "outfits": outfits, "has_skins": bool(skins)})
 
 
 if __name__ == "__main__":

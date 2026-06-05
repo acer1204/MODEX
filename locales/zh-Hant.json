@@ -20,6 +20,7 @@
     "gamesCount": "{n} 個遊戲",
     "charsCount": "{n} 位角色",
     "models": "模型",
+    "officialOutfit": "官方",
     "previewsCount": "{n} 個預覽",
     "loading": "載入中…",
     "noCharDir": "尚未建立此角色的資料夾。<br>請到設定產生角色資料夾。",

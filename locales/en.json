@@ -20,6 +20,7 @@
     "gamesCount": "{n} games",
     "charsCount": "{n} characters",
     "models": "Models",
+    "officialOutfit": "Official",
     "previewsCount": "{n} previews",
     "loading": "Loading…",
     "noCharDir": "This character has no folder yet.<br>Generate character folders in Settings.",
