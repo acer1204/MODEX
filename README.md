@@ -12,9 +12,13 @@ Emby 風格、瀏覽器操作的**遊戲角色 Mod 管理器**（對應 3DMigoto
 | :---: | :---: |
 | ![Library](docs/01-library.png) | ![Character](docs/02-character.png) |
 
-| Settings — game libraries / 設定（兩欄式） |
+| Settings — game libraries / 設定・遊戲庫 | Settings — language / 設定・語言 |
+| :---: | :---: |
+| ![Settings](docs/03-settings.png) | ![Language](docs/04-language.png) |
+
+| Traditional Chinese UI (names / elements / regions translated) / 繁體中文介面（角色・元素・地區皆翻譯） |
 | :---: |
-| ![Settings](docs/03-settings.png) |
+| ![Chinese UI](docs/05-library-zh.png) |
 
 Demo data uses official character art for previews.<br>
 示意畫面以官方角色立繪作為預覽。
