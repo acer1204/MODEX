@@ -195,6 +195,19 @@ def _fetch_parse(page, prop="text"):
     return r.json().get("parse", {}).get(prop)
 
 
+def _file_url(filename):
+    """Return the CDN url for a wiki File:, or None."""
+    try:
+        params = {"action": "query", "titles": "File:" + filename, "prop": "imageinfo",
+                  "iiprop": "url", "format": "json", "formatversion": "2"}
+        pages = requests.get(API_URL, params=params, headers=HEADERS, timeout=60).json().get("query", {}).get("pages", [])
+        if pages and "imageinfo" in pages[0]:
+            return pages[0]["imageinfo"][0]["url"]
+    except Exception:
+        pass
+    return None
+
+
 def _wish_image_url(outfit_name, character):
     """Find the outfit's 'Full Wish' splash from its page gallery; return URL."""
     try:
@@ -278,6 +291,23 @@ def scrape_outfits(image_dir, progress=None):
         result.setdefault(o["character"], []).append(entry)
         if i % 5 == 0:
             log(f"  outfits {i}/{len(skins)}")
+
+    # prepend an "Official" entry (default outfit) using the character's wish art
+    log("Downloading official wish art ...")
+    for ch in list(result.keys()):
+        url = _file_url(f"Character {ch} Full Wish.png")
+        fname = safe_filename(ch + " - Official") + ".png"
+        dest = os.path.join(image_dir, fname)
+        if url and not _icon_ok(dest):
+            download_icon(url, dest)
+        official = {
+            "name": "Official",
+            "folder": "Official",
+            "type": "Default",
+            "image": fname if _icon_ok(dest) else None,
+            "image_url": url,
+        }
+        result[ch].insert(0, official)
 
     log(f"Done. {len(result)} characters have alternate outfits.")
     return result

@@ -827,26 +827,33 @@ def outfit_images(gid, filename):
 
 @app.route("/api/games/<gid>/outfits")
 def api_game_outfits(gid):
-    """Return [Official] + alternate skins for a character (display + image)."""
+    """Return the outfits (Official + alternate skins) for a character.
+
+    The stored list already includes an "Official" entry (with wish art) for
+    characters that have alternate outfits. Characters without skins fall back
+    to a single Official entry using the character icon.
+    """
     require_game(gid)
     character = request.args.get("character", "")
-    skins = load_json(outfits_path(gid), {}).get(character, [])
+    stored = load_json(outfits_path(gid), {}).get(character, [])
+
+    def img_of(s):
+        return f"/outfits/{gid}/{s['image']}" if s.get("image") else s.get("image_url")
+
+    if stored:
+        outfits = [{"name": s["name"], "folder": s["folder"], "type": s.get("type"),
+                    "image_url": img_of(s)} for s in stored]
+        return jsonify({"ok": True, "outfits": outfits, "has_skins": len(stored) > 1})
 
     chars = load_json(characters_path(gid), [])
     ch = next((c for c in chars if c.get("name") == character), None)
-    official_img = None
-    if ch:
-        official_img = (f"/icons/{gid}/{ch['icon']}" if ch.get("icon") else ch.get("icon_url"))
-
-    outfits = [{"name": OFFICIAL, "folder": OFFICIAL, "type": "Default", "image_url": official_img}]
-    for s in skins:
-        outfits.append({
-            "name": s["name"],
-            "folder": s["folder"],
-            "type": s.get("type"),
-            "image_url": (f"/outfits/{gid}/{s['image']}" if s.get("image") else s.get("image_url")),
-        })
-    return jsonify({"ok": True, "outfits": outfits, "has_skins": bool(skins)})
+    official_img = (f"/icons/{gid}/{ch['icon']}" if ch and ch.get("icon")
+                    else (ch.get("icon_url") if ch else None))
+    return jsonify({
+        "ok": True,
+        "outfits": [{"name": OFFICIAL, "folder": OFFICIAL, "type": "Default", "image_url": official_img}],
+        "has_skins": False,
+    })
 
 
 if __name__ == "__main__":
