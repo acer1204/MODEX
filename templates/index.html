@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MODEX — Mod Index</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- ===================== Sidebar ===================== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="side-brand">
+        <button class="hamburger" id="hamburger" title="收合側邊欄">
+          <span></span><span></span><span></span>
+        </button>
+        <span class="brand-dot"></span>
+        <span class="brand-name">MODEX</span>
+      </div>
+
+      <nav class="side-nav">
+        <a class="nav-item" data-nav="home" id="nav-home">
+          <span class="nav-ico">🏠</span><span class="nav-label">首頁</span>
+        </a>
+      </nav>
+
+      <div class="side-section">
+        <div class="side-section-title">遊戲庫 · GAME LIBRARIES</div>
+        <nav class="side-nav" id="gameNav">
+          <!-- enabled games injected here -->
+        </nav>
+        <div class="side-empty" id="sideEmpty">
+          <span>尚未啟用遊戲庫</span>
+          <button class="link-btn" id="sideOpenSettings">前往設定 ›</button>
+        </div>
+      </div>
+
+      <div class="side-foot">
+        <span class="avatar">A</span>
+        <span class="side-user" id="sideUser">admin</span>
+      </div>
+    </aside>
+
+    <!-- ===================== Main ===================== -->
+    <div class="main">
+      <!-- Top bar -->
+      <header class="topbar">
+        <button class="hamburger topbar-burger" id="hamburger2" title="收合側邊欄">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="crumb">
+          <button class="icon-btn" id="navBack" title="返回">‹</button>
+          <button class="icon-btn" id="navFwd" title="前進">›</button>
+          <h1 id="crumbTitle">首頁</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="search">
+            <span class="search-ico">🔍</span>
+            <input id="globalSearch" type="text" placeholder="Search..." />
+          </div>
+          <button class="icon-btn" id="btnBell" title="通知">🔔</button>
+          <button class="icon-btn" id="btnSettings" title="設定">⚙️</button>
+        </div>
+      </header>
+
+      <!-- Filter bar (library view only) -->
+      <div class="filterbar hidden" id="filterbar"></div>
+
+      <!-- Content -->
+      <main class="content" id="content"></main>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

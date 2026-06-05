@@ -1,0 +1,718 @@
+"""MODEX — Mod Index (Flask backend).
+
+Multi-game architecture:
+  * SUPPORTED_GAMES is a registry of games we know how to scrape.
+  * Each game has per-user config (enabled + mods_folder) stored in config.json.
+  * Enabled games show up as libraries in the sidebar.
+
+Run:  python app.py   ->  http://127.0.0.1:8811
+"""
+
+import os
+import json
+import mimetypes
+
+from flask import (
+    Flask,
+    jsonify,
+    request,
+    render_template,
+    send_from_directory,
+    send_file,
+    abort,
+)
+
+import scraper
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(HERE, "data")
+ICON_ROOT = os.path.join(HERE, "static", "icons")
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+
+PREVIEW_EXT = {
+    "image": {".png", ".jpg", ".jpeg", ".webp", ".bmp"},
+    "gif": {".gif"},
+    "video": {".mp4", ".webm", ".mov", ".m4v"},
+}
+
+# --------------------------------------------------------------------------- #
+#  Supported games registry
+#  Add a new game by registering a scraper(icon_dir)->[{name,icon,...facets}]
+#  plus the facet metadata used to build the filter bar.
+# --------------------------------------------------------------------------- #
+SUPPORTED_GAMES = {
+    "genshin": {
+        "id": "genshin",
+        "name": "Genshin Impact",
+        "name_zh": "原神",
+        "icon": "⚔️",
+        "source": "Fandom Wiki",
+        "facets": [
+            {"key": "quality", "label": "稀有度", "kind": "stars"},
+            {"key": "element", "label": "元素", "kind": "tag"},
+            {"key": "region", "label": "地區", "kind": "tag"},
+        ],
+        "scraper": scraper.scrape,
+    },
+}
+
+app = Flask(__name__)
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(ICON_ROOT, exist_ok=True)
+
+
+# --------------------------------------------------------------------------- #
+#  json helpers
+# --------------------------------------------------------------------------- #
+def load_json(path, default):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return default
+    return default
+
+
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def get_config():
+    cfg = load_json(CONFIG_FILE, {})
+    cfg.setdefault("games", {})
+    return cfg
+
+
+def game_cfg(cfg, gid):
+    return cfg["games"].get(gid, {"enabled": False, "mods_folder": ""})
+
+
+def characters_path(gid):
+    return os.path.join(DATA_DIR, f"characters_{gid}.json")
+
+
+def icon_dir(gid):
+    return os.path.join(ICON_ROOT, gid)
+
+
+def media_kind(filename):
+    ext = os.path.splitext(filename)[1].lower()
+    for kind, exts in PREVIEW_EXT.items():
+        if ext in exts:
+            return kind
+    return None
+
+
+def require_game(gid):
+    if gid not in SUPPORTED_GAMES:
+        abort(404, description="未知的遊戲")
+    return SUPPORTED_GAMES[gid]
+
+
+def public_game(gid, cfg=None):
+    """Game info merged with the user's config — safe to send to the client."""
+    cfg = cfg or get_config()
+    g = SUPPORTED_GAMES[gid]
+    gc = game_cfg(cfg, gid)
+    folder = gc.get("mods_folder", "")
+    chars = load_json(characters_path(gid), [])
+    return {
+        "id": g["id"],
+        "name": g["name"],
+        "name_zh": g["name_zh"],
+        "icon": g["icon"],
+        "source": g["source"],
+        "facets": g["facets"],
+        "enabled": bool(gc.get("enabled")),
+        "mods_folder": folder,
+        "mods_exists": bool(folder) and os.path.isdir(folder),
+        "char_count": len(chars),
+    }
+
+
+def _safe_join(base, *parts):
+    target = os.path.abspath(os.path.join(base, *parts))
+    base_abs = os.path.abspath(base)
+    if os.path.commonpath([base_abs, target]) != base_abs:
+        abort(403)
+    return target
+
+
+# --------------------------------------------------------------------------- #
+#  model enable / disable  (3DMigoto "DISABLED " folder-name convention)
+# --------------------------------------------------------------------------- #
+import re
+
+DISABLED_PREFIX = "DISABLED "
+ORDER_FILE = ".modex_order.json"   # stores the preview display order (first = cover)
+
+
+def strip_disabled(name: str) -> str:
+    return name[len(DISABLED_PREFIX):] if name.startswith(DISABLED_PREFIX) else name
+
+
+def is_enabled(name: str) -> bool:
+    return not name.startswith(DISABLED_PREFIX)
+
+
+def _list_media(model_path: str):
+    return [f for f in os.listdir(model_path)
+            if os.path.isfile(os.path.join(model_path, f)) and media_kind(f)]
+
+
+def _apply_order(model_path: str, files):
+    """Order media files by the saved order; unlisted files go to the end."""
+    saved = []
+    op = os.path.join(model_path, ORDER_FILE)
+    if os.path.isfile(op):
+        try:
+            with open(op, "r", encoding="utf-8") as fh:
+                saved = json.load(fh)
+            if not isinstance(saved, list):
+                saved = []
+        except Exception:
+            saved = []
+    fileset = set(files)
+    ordered = [f for f in saved if f in fileset]
+    rest = sorted([f for f in files if f not in set(ordered)], key=str.lower)
+    return ordered + rest
+
+
+def _previews_of(model_path: str):
+    return [{"file": f, "kind": media_kind(f)} for f in _apply_order(model_path, _list_media(model_path))]
+
+
+def list_models(char_dir: str):
+    """Return the model folders under a character dir with display info."""
+    models = []
+    for entry in sorted(os.listdir(char_dir), key=lambda n: strip_disabled(n).lower()):
+        model_path = os.path.join(char_dir, entry)
+        if not os.path.isdir(model_path):
+            continue
+        previews = _previews_of(model_path)
+        models.append(
+            {
+                "folder": entry,               # real name on disk (for API ops)
+                "name": strip_disabled(entry), # display name (no DISABLED prefix)
+                "enabled": is_enabled(entry),
+                "preview_count": len(previews),
+                "previews": previews,
+            }
+        )
+    # enabled model first
+    models.sort(key=lambda m: (not m["enabled"], m["name"].lower()))
+    return models
+
+
+# --------------------------------------------------------------------------- #
+#  hotkey parsing from the mod's .ini
+# --------------------------------------------------------------------------- #
+def _format_key(raw: str):
+    if not raw:
+        return None
+    mod_map = {"ctrl": "Ctrl", "control": "Ctrl", "alt": "Alt", "shift": "Shift"}
+    mods, keys = [], []
+    for tok in raw.split():
+        low = tok.lower()
+        if low == "no_modifiers":
+            continue
+        if low in mod_map:
+            mods.append(mod_map[low])
+        else:
+            keys.append(tok.upper() if len(tok) == 1 else tok)
+    out = " + ".join(mods + keys)
+    return out or raw
+
+
+def find_main_ini(model_path: str):
+    """The mod's active .ini = a .ini whose filename has no DISABLED prefix.
+    Prefer one that actually declares [Key...] hotkeys."""
+    candidates = []
+    for root, _dirs, files in os.walk(model_path):
+        for f in files:
+            if f.lower().endswith(".ini") and not f.upper().startswith("DISABLED"):
+                candidates.append(os.path.join(root, f))
+    if not candidates:
+        return None
+    for p in candidates:
+        try:
+            with open(p, "r", encoding="utf-8", errors="ignore") as fh:
+                low = fh.read().lower()
+                if re.search(r"^\s*\[key", low, re.M):
+                    return p
+        except Exception:
+            pass
+    return candidates[0]
+
+
+def parse_hotkeys(ini_path: str):
+    """Scan every [Key...] section (the reliable source of a hotkey).
+
+    For each section return {name, key, type, states}:
+      * key    -> the bound hotkey (e.g. "Y", "Alt + 6", "/")
+      * type   -> cycle / toggle / hold / activate ...
+      * states -> number of cycle values if it cycles a $var = a,b,c list
+      * name   -> the cycled variable name if any, else the section name
+                  with its leading "Key" stripped (e.g. KeyHelp -> Help)
+    Sections without a `key =` line are skipped (not a hotkey).
+    """
+    try:
+        with open(ini_path, "r", encoding="utf-8", errors="ignore") as fh:
+            lines = fh.read().splitlines()
+    except Exception:
+        return []
+
+    sections, cur = [], None
+    for raw in lines:
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            if cur is not None:
+                sections.append(cur)
+            name = line[1:-1]
+            cur = {"section": name, "key": None, "type": None, "var": None, "states": None} \
+                if name.lower().startswith("key") else None
+            continue
+        if cur is None or not line or line.startswith(";"):
+            continue
+        mk = re.match(r"key\s*=\s*(.+)", line, re.I)
+        if mk:
+            cur["key"] = mk.group(1).strip()
+            continue
+        mt = re.match(r"type\s*=\s*(\w+)", line, re.I)
+        if mt:
+            cur["type"] = mt.group(1).lower()
+            continue
+        mv = re.match(r"\$(\w+)\s*=\s*([0-9][0-9,\s]*)$", line)
+        if mv:
+            vals = [v for v in re.split(r"\s*,\s*", mv.group(2).strip()) if v != ""]
+            if cur["var"] is None and len(vals) > 1:
+                cur["var"] = mv.group(1)
+                cur["states"] = len(vals)
+    if cur is not None:
+        sections.append(cur)
+
+    result = []
+    for s in sections:
+        if not s["key"]:
+            continue  # no actual hotkey bound
+        name = s["var"] or re.sub(r"^key[\s_-]*", "", s["section"], flags=re.I) or s["section"]
+        result.append(
+            {
+                "name": name,
+                "key": _format_key(s["key"]),
+                "type": s["type"],
+                "states": s["states"],
+            }
+        )
+    return result
+
+
+def sanitize_upload_name(name: str) -> str:
+    name = os.path.basename(name or "")
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip() or "image.png"
+    return name
+
+
+def unique_name(folder: str, filename: str) -> str:
+    base, ext = os.path.splitext(filename)
+    cand, i = filename, 1
+    while os.path.exists(os.path.join(folder, cand)):
+        cand = f"{base}_{i}{ext}"
+        i += 1
+    return cand
+
+
+# --------------------------------------------------------------------------- #
+#  page
+# --------------------------------------------------------------------------- #
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+# --------------------------------------------------------------------------- #
+#  games
+# --------------------------------------------------------------------------- #
+@app.route("/api/games")
+def api_games():
+    cfg = get_config()
+    games = [public_game(gid, cfg) for gid in SUPPORTED_GAMES]
+    return jsonify({"games": games})
+
+
+@app.route("/api/games/<gid>/config", methods=["POST"])
+def api_game_config(gid):
+    require_game(gid)
+    data = request.get_json(force=True, silent=True) or {}
+    cfg = get_config()
+    gc = game_cfg(cfg, gid)
+    if "enabled" in data:
+        gc["enabled"] = bool(data["enabled"])
+    if "mods_folder" in data:
+        gc["mods_folder"] = (data.get("mods_folder") or "").strip().strip('"')
+    cfg["games"][gid] = gc
+    save_json(CONFIG_FILE, cfg)
+    return jsonify({"ok": True, "game": public_game(gid, cfg)})
+
+
+@app.route("/api/games/<gid>/refresh", methods=["POST"])
+def api_game_refresh(gid):
+    g = require_game(gid)
+    try:
+        chars = g["scraper"](icon_dir(gid))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    save_json(characters_path(gid), chars)
+    return jsonify({"ok": True, "count": len(chars), "game": public_game(gid)})
+
+
+@app.route("/api/games/<gid>/characters")
+def api_game_characters(gid):
+    require_game(gid)
+    chars = load_json(characters_path(gid), [])
+    return jsonify({"characters": chars, "count": len(chars), "game": public_game(gid)})
+
+
+@app.route("/api/games/<gid>/generate-folders", methods=["POST"])
+def api_game_generate(gid):
+    require_game(gid)
+    cfg = get_config()
+    gc = game_cfg(cfg, gid)
+    folder = gc.get("mods_folder", "")
+    if not folder:
+        return jsonify({"ok": False, "error": "尚未設定 Mods 資料夾"}), 400
+    if not os.path.isdir(folder):
+        return jsonify({"ok": False, "error": f"資料夾不存在：{folder}"}), 400
+
+    chars = load_json(characters_path(gid), [])
+    if not chars:
+        return jsonify({"ok": False, "error": "尚未爬取角色資料，請先更新"}), 400
+
+    created, skipped = [], []
+    for ch in chars:
+        name = scraper.safe_filename(ch["name"])
+        target = os.path.join(folder, name)
+        if os.path.isdir(target):
+            skipped.append(name)
+        else:
+            try:
+                os.makedirs(target, exist_ok=True)
+                created.append(name)
+            except Exception:
+                skipped.append(name)
+    return jsonify(
+        {
+            "ok": True,
+            "created_count": len(created),
+            "skipped_count": len(skipped),
+        }
+    )
+
+
+def _mods_folder(gid):
+    return game_cfg(get_config(), gid).get("mods_folder", "")
+
+
+def _resolve_char_dir(gid, character):
+    """Return (char_dir, error_response). error_response is None on success."""
+    folder = _mods_folder(gid)
+    if not folder or not os.path.isdir(folder):
+        return None, (jsonify({"ok": False, "error": "Mods 資料夾未設定或不存在"}), 400)
+    char_dir = _safe_join(folder, scraper.safe_filename(character))
+    return char_dir, None
+
+
+@app.route("/api/games/<gid>/models")
+def api_game_models(gid):
+    require_game(gid)
+    character = request.args.get("character", "")
+    char_dir, err = _resolve_char_dir(gid, character)
+    if err:
+        return err
+    if not os.path.isdir(char_dir):
+        return jsonify({"ok": True, "models": [], "char_dir_exists": False})
+    return jsonify({"ok": True, "models": list_models(char_dir), "char_dir_exists": True})
+
+
+@app.route("/api/games/<gid>/model/toggle", methods=["POST"])
+def api_model_toggle(gid):
+    require_game(gid)
+    data = request.get_json(force=True, silent=True) or {}
+    character = data.get("character", "")
+    folder = data.get("folder", "")
+    enable = bool(data.get("enable"))
+
+    char_dir, err = _resolve_char_dir(gid, character)
+    if err:
+        return err
+    if not os.path.isdir(char_dir):
+        return jsonify({"ok": False, "error": "角色資料夾不存在"}), 404
+
+    target_base = strip_disabled(folder)
+    for entry in os.listdir(char_dir):
+        path = os.path.join(char_dir, entry)
+        if not os.path.isdir(path):
+            continue
+        ebase = strip_disabled(entry)
+        if enable:
+            # exactly one active: target on, every sibling off
+            want_enabled = (ebase == target_base)
+        else:
+            # only switch the target off; leave the rest untouched
+            want_enabled = is_enabled(entry) if ebase != target_base else False
+        desired = ebase if want_enabled else DISABLED_PREFIX + ebase
+        if desired != entry:
+            dst = os.path.join(char_dir, desired)
+            if not os.path.exists(dst):
+                try:
+                    os.rename(path, dst)
+                except OSError as exc:
+                    return jsonify({"ok": False, "error": f"無法重新命名「{entry}」：{exc}"}), 500
+
+    return jsonify({"ok": True, "models": list_models(char_dir)})
+
+
+@app.route("/api/games/<gid>/model/hotkeys")
+def api_model_hotkeys(gid):
+    require_game(gid)
+    character = request.args.get("character", "")
+    folder = request.args.get("folder", "")
+    char_dir, err = _resolve_char_dir(gid, character)
+    if err:
+        return err
+    model_path = _safe_join(char_dir, folder)
+    if not os.path.isdir(model_path):
+        return jsonify({"ok": False, "error": "模型資料夾不存在"}), 404
+    ini = find_main_ini(model_path)
+    if not ini:
+        return jsonify({"ok": True, "ini": None, "hotkeys": []})
+    return jsonify(
+        {
+            "ok": True,
+            "ini": os.path.basename(ini),
+            "hotkeys": parse_hotkeys(ini),
+        }
+    )
+
+
+@app.route("/api/games/<gid>/model/preview/delete", methods=["POST"])
+def api_preview_delete(gid):
+    require_game(gid)
+    data = request.get_json(force=True, silent=True) or {}
+    character, folder, fname = data.get("character", ""), data.get("folder", ""), data.get("file", "")
+    char_dir, err = _resolve_char_dir(gid, character)
+    if err:
+        return err
+    path = _safe_join(char_dir, folder, fname)
+    if not os.path.isfile(path) or not media_kind(fname):
+        return jsonify({"ok": False, "error": "檔案不存在"}), 404
+    try:
+        os.remove(path)
+    except OSError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    model_path = _safe_join(char_dir, folder)
+    return jsonify({"ok": True, "previews": _previews_of(model_path)})
+
+
+@app.route("/api/games/<gid>/model/preview/upload", methods=["POST"])
+def api_preview_upload(gid):
+    require_game(gid)
+    character = request.form.get("character", "")
+    folder = request.form.get("folder", "")
+    char_dir, err = _resolve_char_dir(gid, character)
+    if err:
+        return err
+    if not folder:
+        return jsonify({"ok": False, "error": "缺少模型資料夾"}), 400
+    model_path = _safe_join(char_dir, folder)
+    if not os.path.isdir(model_path) or os.path.abspath(model_path) == os.path.abspath(char_dir):
+        return jsonify({"ok": False, "error": "模型資料夾不存在"}), 404
+
+    files = request.files.getlist("file")
+    if not files:
+        return jsonify({"ok": False, "error": "沒有收到檔案"}), 400
+
+    saved = []
+    for fs in files:
+        name = sanitize_upload_name(fs.filename)
+        if not media_kind(name):
+            continue  # skip non-media
+        name = unique_name(model_path, name)
+        fs.save(os.path.join(model_path, name))
+        saved.append(name)
+    if not saved:
+        return jsonify({"ok": False, "error": "不支援的檔案格式"}), 400
+    return jsonify({"ok": True, "saved": saved, "previews": _previews_of(model_path)})
+
+
+@app.route("/api/games/<gid>/model/preview/reorder", methods=["POST"])
+def api_preview_reorder(gid):
+    require_game(gid)
+    data = request.get_json(force=True, silent=True) or {}
+    character, folder = data.get("character", ""), data.get("folder", "")
+    order = data.get("order", [])
+    char_dir, err = _resolve_char_dir(gid, character)
+    if err:
+        return err
+    if not folder:
+        return jsonify({"ok": False, "error": "缺少模型資料夾"}), 400
+    model_path = _safe_join(char_dir, folder)
+    if not os.path.isdir(model_path) or os.path.abspath(model_path) == os.path.abspath(char_dir):
+        return jsonify({"ok": False, "error": "模型資料夾不存在"}), 404
+    # keep only names that are real media files in this folder
+    media = set(_list_media(model_path))
+    clean = [f for f in order if f in media]
+    try:
+        with open(os.path.join(model_path, ORDER_FILE), "w", encoding="utf-8") as fh:
+            json.dump(clean, fh, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "previews": _previews_of(model_path)})
+
+
+def open_in_explorer(path):
+    """Open a folder in the OS file manager (this app runs locally)."""
+    import sys
+    import subprocess
+    if os.name == "nt":
+        _open_and_focus_windows(path)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+    else:
+        subprocess.Popen(["xdg-open", path])
+
+
+def _open_and_focus_windows(path):
+    """Open the folder in Explorer and pull its window to the foreground.
+
+    A window spawned by a background process (our Flask server) normally
+    opens behind the active window because of Windows' foreground lock.
+    We locate the matching Explorer window and force it to the front using
+    AttachThreadInput + a topmost flicker.
+
+    NOTE: ctypes argtypes/restype MUST be declared — window/thread handles
+    are pointer-sized and get corrupted if left as the default c_int.
+    """
+    import ctypes
+    import time
+    from ctypes import wintypes
+
+    u = ctypes.windll.user32
+    k = ctypes.windll.kernel32
+
+    u.GetForegroundWindow.restype = wintypes.HWND
+    u.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    u.GetWindowThreadProcessId.restype = wintypes.DWORD
+    u.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+    u.SetForegroundWindow.argtypes = [wintypes.HWND]
+    u.BringWindowToTop.argtypes = [wintypes.HWND]
+    u.SetActiveWindow.argtypes = [wintypes.HWND]
+    u.IsIconic.argtypes = [wintypes.HWND]
+    u.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    u.IsWindowVisible.argtypes = [wintypes.HWND]
+    u.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int,
+                               ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+    u.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    u.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+
+    os.startfile(path)  # noqa: only exists on Windows
+
+    target = os.path.basename(os.path.normpath(path)).lower()
+    EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def find():
+        hits = []
+
+        def cb(hwnd, _lparam):
+            if not u.IsWindowVisible(hwnd):
+                return True
+            cls = ctypes.create_unicode_buffer(256)
+            u.GetClassNameW(hwnd, cls, 256)
+            if cls.value in ("CabinetWClass", "ExploreWClass"):
+                txt = ctypes.create_unicode_buffer(512)
+                u.GetWindowTextW(hwnd, txt, 512)
+                # Explorer titles the window e.g. "Zibai - File Explorer";
+                # the folder name is a prefix, so match by "contains".
+                if target in txt.value.lower():
+                    hits.append(hwnd)
+            return True
+
+        u.EnumWindows(EnumWindowsProc(cb), 0)
+        return hits[-1] if hits else None
+
+    hwnd = None
+    for _ in range(30):  # poll up to ~3s for the window to appear
+        hwnd = find()
+        if hwnd:
+            break
+        time.sleep(0.1)
+    if not hwnd:
+        return
+
+    SW_RESTORE, SW_SHOW = 9, 5
+    SWP_NOSIZE, SWP_NOMOVE, SWP_SHOWWINDOW = 0x0001, 0x0002, 0x0040
+    HWND_TOPMOST = wintypes.HWND(-1)
+    HWND_NOTOPMOST = wintypes.HWND(-2)
+    try:
+        if u.IsIconic(hwnd):
+            u.ShowWindow(hwnd, SW_RESTORE)
+        else:
+            u.ShowWindow(hwnd, SW_SHOW)
+        # ALT key tap resets the foreground lock so SetForegroundWindow is honoured
+        u.keybd_event(0x12, 0, 0, 0)
+        u.keybd_event(0x12, 0, 0x0002, 0)
+        # topmost flicker raises the window's Z-order to the very top (this
+        # works even when we can't grab keyboard focus), then drop always-on-top
+        u.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+        u.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+        u.BringWindowToTop(hwnd)
+        u.SetForegroundWindow(hwnd)
+        u.SetActiveWindow(hwnd)
+    except Exception:
+        pass
+
+
+@app.route("/api/games/<gid>/open-folder", methods=["POST"])
+def api_open_folder(gid):
+    require_game(gid)
+    data = request.get_json(force=True, silent=True) or {}
+    character = data.get("character", "")
+    char_dir, err = _resolve_char_dir(gid, character)
+    if err:
+        return err
+    if not os.path.isdir(char_dir):
+        return jsonify({"ok": False, "error": "角色資料夾不存在，請先在設定產生角色資料夾"}), 404
+    try:
+        open_in_explorer(char_dir)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "path": char_dir})
+
+
+@app.route("/api/games/<gid>/media")
+def api_game_media(gid):
+    require_game(gid)
+    character = request.args.get("character", "")
+    model = request.args.get("model", "")
+    fname = request.args.get("file", "")
+    cfg = get_config()
+    folder = game_cfg(cfg, gid).get("mods_folder", "")
+    if not folder or not os.path.isdir(folder):
+        abort(404)
+    path = _safe_join(folder, scraper.safe_filename(character), model, fname)
+    if not os.path.isfile(path):
+        abort(404)
+    mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+    return send_file(path, mimetype=mime, conditional=True)
+
+
+@app.route("/icons/<gid>/<path:filename>")
+def icons(gid, filename):
+    require_game(gid)
+    return send_from_directory(icon_dir(gid), filename)
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=8811, debug=True)
