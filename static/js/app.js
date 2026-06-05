@@ -51,6 +51,7 @@ function tList(path) {
 }
 // data lookups — fall back to the raw English value when a translation is absent
 function tChar(name) { return (state.locale?.characters?.[name]) || name; }
+function tOutfit(name) { return (state.locale?.outfits?.[name]) || name; }
 function tElement(e) { return (state.locale?.elements?.[e]) || e; }
 function tRegion(r) { return (state.locale?.regions?.[r]) || r; }
 function tFacetLabel(key) { return (state.locale?.facets?.[key]) || key; }
@@ -490,7 +491,7 @@ function renderOutfitSwitcher(gid, charName, outfits) {
   outfits.forEach((o) => {
     const card = el("button", "outfit-card" + (o.folder === state.outfit ? " active" : ""));
     card.dataset.folder = o.folder;
-    const label = o.folder === "Official" ? t("ui.officialOutfit") : o.name;
+    const label = o.folder === "Official" ? t("ui.officialOutfit") : tOutfit(o.name);
     card.innerHTML = `<div class="oc-img">${o.image_url ? `<img src="${o.image_url}" alt="${o.name}">` : ""}</div>
       <div class="oc-name" title="${o.name}">${label}</div>`;
     card.addEventListener("click", () => {
@@ -510,7 +511,7 @@ async function renderOutfitModels(gid, charName) {
   const outfit = state.outfit;
   // show current outfit label next to the character name
   const lbl = $("#cdOutfit");
-  if (lbl) lbl.textContent = outfit && outfit !== "Official" ? ` · ${outfit}` : ` · ${t("ui.officialOutfit")}`;
+  if (lbl) lbl.textContent = outfit && outfit !== "Official" ? ` · ${tOutfit(outfit)}` : ` · ${t("ui.officialOutfit")}`;
   box.innerHTML = `<div class="model-empty">${t("ui.loading")}</div>`;
   try {
     const data = await api(`/api/games/${gid}/models?character=${encodeURIComponent(charName)}&outfit=${encodeURIComponent(outfit)}`);
