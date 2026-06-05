@@ -451,25 +451,31 @@ def api_game_generate(gid):
     if not chars:
         return jsonify({"ok": False, "error": "尚未爬取角色資料，請先更新"}), 400
 
-    created, skipped = [], []
-    for ch in chars:
-        name = scraper.safe_filename(ch["name"])
-        target = os.path.join(folder, name)
-        if os.path.isdir(target):
-            skipped.append(name)
+    all_outfits = load_json(outfits_path(gid), {})
+    created = skipped = 0
+
+    def make(path):
+        nonlocal created, skipped
+        if os.path.isdir(path):
+            skipped += 1
         else:
             try:
-                os.makedirs(target, exist_ok=True)
-                created.append(name)
+                os.makedirs(path, exist_ok=True)
+                created += 1
             except Exception:
-                skipped.append(name)
-    return jsonify(
-        {
-            "ok": True,
-            "created_count": len(created),
-            "skipped_count": len(skipped),
-        }
-    )
+                skipped += 1
+
+    for ch in chars:
+        char_dir = os.path.join(folder, scraper.safe_filename(ch["name"]))
+        make(char_dir)
+        # for characters with alternate outfits, also create each outfit
+        # subfolder (Official + each skin) so mods can be dropped straight in.
+        outfits = all_outfits.get(ch["name"], [])
+        if len(outfits) > 1:
+            for o in outfits:
+                make(os.path.join(char_dir, scraper.safe_filename(o.get("folder", ""))))
+
+    return jsonify({"ok": True, "created_count": created, "skipped_count": skipped})
 
 
 def _mods_folder(gid):
