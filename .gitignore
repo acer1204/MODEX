@@ -9,8 +9,8 @@ venv/
 data/
 static/icons/
 
-# Local dev helpers (screenshot generator + its demo data)
-/_*.py
+# Local dev helpers (screenshot / locale generators + their temp data)
+/_*
 /_demo_mods/
 
 # Editor / OS / tooling
