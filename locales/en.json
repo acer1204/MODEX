@@ -92,7 +92,10 @@
   "facets": {
     "quality": "Quality",
     "element": "Element",
-    "region": "Region"
+    "region": "Region",
+    "rank": "Rank",
+    "attribute": "Attribute",
+    "attacktype": "Attack Type"
   },
   "hotkeyTypes": {
     "cycle": "Cycle",
@@ -119,6 +122,25 @@
     "Natlan": "Natlan",
     "Snezhnaya": "Snezhnaya",
     "Nod-Krai": "Nod-Krai",
+    "None": "None"
+  },
+  "attributes": {
+    "Electric": "Electric",
+    "Fire": "Fire",
+    "Ice": "Ice",
+    "Frost": "Frost",
+    "Ether": "Ether",
+    "Physical": "Physical",
+    "Auric Ink": "Auric Ink",
+    "Honed Edge": "Honed Edge",
+    "None": "None"
+  },
+  "attacktypes": {
+    "Slash": "Slash",
+    "Strike": "Strike",
+    "Pierce": "Pierce",
+    "Pierce / Slash": "Pierce / Slash",
+    "Slash / Strike": "Slash / Strike",
     "None": "None"
   },
   "characters": {
@@ -266,6 +288,25 @@
     "To the Church's Free Spirit": "To the Church's Free Spirit",
     "Toward the Distant Horizon": "Toward the Distant Horizon",
     "Tranquil Banquet": "Tranquil Banquet",
-    "Twilight Blossom": "Twilight Blossom"
+    "Twilight Blossom": "Twilight Blossom",
+    "Afternoon Tea Break": "Afternoon Tea Break",
+    "Chandelier": "Chandelier",
+    "Culinary Jewel": "Culinary Jewel",
+    "Cunning Cutie": "Cunning Cutie",
+    "Delicate Sunlight": "Delicate Sunlight",
+    "Dignified Blossom": "Dignified Blossom",
+    "Discordant Note": "Discordant Note",
+    "Iris of the Shore": "Iris of the Shore",
+    "Nocturne of Light": "Nocturne of Light",
+    "On Campus": "On Campus",
+    "Peaceful Waves": "Peaceful Waves",
+    "Rhapsody's Muse": "Rhapsody's Muse",
+    "Sea of Thyme": "Sea of Thyme",
+    "Soaring Crane": "Soaring Crane",
+    "Summer Skies": "Summer Skies",
+    "Tanuki in Broad Daylight": "Tanuki in Broad Daylight",
+    "Touch of Dawnlight": "Touch of Dawnlight",
+    "Trails of Ink": "Trails of Ink",
+    "White Heart Silhouette": "White Heart Silhouette"
   }
 }

@@ -313,6 +313,169 @@ def scrape_outfits(image_dir, characters=None, progress=None):
     return result
 
 
+# =========================================================================== #
+#  Zenless Zone Zero (ZZZ) — agents + outfits
+# =========================================================================== #
+ZZZ_API = "https://zenless-zone-zero.fandom.com/api.php"
+ZZZ_PROTAGONISTS = ["Belle", "Wise"]
+
+
+def _zzz_parse(page, prop="text"):
+    params = {"action": "parse", "page": page, "prop": prop,
+              "format": "json", "formatversion": "2", "redirects": "1"}
+    r = requests.get(ZZZ_API, params=params, headers=HEADERS, timeout=60)
+    r.raise_for_status()
+    return r.json().get("parse", {}).get(prop)
+
+
+def _zzz_file_url(filename, width=256):
+    try:
+        params = {"action": "query", "titles": "File:" + filename, "prop": "imageinfo",
+                  "iiprop": "url", "iiurlwidth": width, "format": "json", "formatversion": "2"}
+        pages = requests.get(ZZZ_API, params=params, headers=HEADERS, timeout=60).json().get("query", {}).get("pages", [])
+        if pages and "imageinfo" in pages[0]:
+            info = pages[0]["imageinfo"][0]
+            return info.get("thumburl") or info.get("url")
+    except Exception:
+        pass
+    return None
+
+
+def _clean_attack(text):
+    """ZZZ concatenates multi attack types e.g. 'PierceSlash' -> 'Pierce / Slash'."""
+    parts = re.findall(r"[A-Z][a-z]+", text or "")
+    return " / ".join(parts) if parts else (text or "")
+
+
+def parse_zzz_agents(html):
+    soup = BeautifulSoup(html, "lxml")
+    table = None
+    for tbl in soup.find_all("table"):
+        rows = tbl.find_all("tr")
+        if len(rows) > 10:
+            hdr = [th.get_text(strip=True) for th in rows[0].find_all(["th", "td"])]
+            if "Rank" in hdr and "Attribute" in hdr and "Attack Type" in hdr:
+                table = tbl
+                break
+    agents = []
+    if table:
+        for r in table.find_all("tr")[1:]:
+            c = r.find_all("td", recursive=False)
+            if len(c) < 6:
+                continue
+            rimg = c[2].find("img")
+            rank = (rimg.get("alt", "").replace("AgentRank", "").strip() if rimg else "")
+            agents.append({
+                "name": c[1].get_text(strip=True),
+                "icon_url": _clean_icon_url(_img_src(c[0].find("img"))),
+                "rank": rank,
+                "attribute": c[3].get_text(strip=True),
+                "attacktype": _clean_attack(c[5].get_text(strip=True)),
+            })
+    return agents
+
+
+def scrape_zzz(icon_dir, progress=None):
+    """Scrape ZZZ Protagonist + Playable agents -> [{name, icon, rank, attribute, attacktype}]."""
+    def log(msg):
+        if progress:
+            progress(msg)
+
+    log("Fetching ZZZ agents from Fandom API ...")
+    agents = parse_zzz_agents(_zzz_parse("Agent"))
+    # protagonists (Belle / Wise) — no rank/attribute/attack type
+    prot = []
+    for name in ZZZ_PROTAGONISTS:
+        prot.append({"name": name, "icon_url": _zzz_file_url(f"Agent {name} Icon.png"),
+                     "rank": "", "attribute": "", "attacktype": ""})
+    agents = prot + agents
+    log(f"Parsed {len(agents)} agents. Downloading icons ...")
+
+    os.makedirs(icon_dir, exist_ok=True)
+    ok = 0
+    for i, a in enumerate(agents, 1):
+        fname = safe_filename(a["name"]) + ".png"
+        dest = os.path.join(icon_dir, fname)
+        url = a["icon_url"] or _zzz_file_url(f"Agent {a['name']} Icon.png")
+        if not _icon_ok(dest):
+            download_icon(url, dest)
+        a["icon"] = fname if _icon_ok(dest) else None
+        a["icon_url"] = url
+        if a["icon"]:
+            ok += 1
+        if i % 15 == 0:
+            log(f"  icons {i}/{len(agents)}")
+    log(f"Done. {ok}/{len(agents)} ZZZ icons cached.")
+    return agents
+
+
+def parse_zzz_outfits(html):
+    soup = BeautifulSoup(html, "lxml")
+    seen, outfits = set(), []
+    for tbl in soup.find_all("table"):
+        rows = tbl.find_all("tr")
+        if not rows:
+            continue
+        hdr = [th.get_text(strip=True) for th in rows[0].find_all(["th", "td"])]
+        if hdr[:5] != ["Icon", "Name", "Rarity", "Agent", "Type"]:
+            continue
+        for r in rows[1:]:
+            c = r.find_all("td", recursive=False)
+            if len(c) < 5:
+                continue
+            name, agent, typ = c[1].get_text(strip=True), c[3].get_text(strip=True), c[4].get_text(strip=True)
+            key = (agent, name)
+            if name and agent and key not in seen:
+                seen.add(key)
+                outfits.append({"name": name, "agent": agent, "type": typ})
+    return outfits
+
+
+def scrape_zzz_outfits(image_dir, characters=None, progress=None):
+    """ZZZ outfits using each agent/outfit Portrait as the wish art.
+    Every agent gets an Official entry; agents with alternate outfits get skins."""
+    def log(msg):
+        if progress:
+            progress(msg)
+
+    log("Fetching ZZZ agent outfits ...")
+    outfits = parse_zzz_outfits(_zzz_parse("Agent Outfit"))
+    skins = [o for o in outfits if o["type"].lower() != "default"]
+    os.makedirs(image_dir, exist_ok=True)
+
+    result = {}
+    log(f"Downloading {len(skins)} skin portraits ...")
+    for o in skins:
+        url = _zzz_file_url(f"Agent {o['agent']} {o['name']} Portrait.png", 512)
+        fname = safe_filename(o["agent"] + " - " + o["name"]) + ".png"
+        dest = os.path.join(image_dir, fname)
+        if url and not _icon_ok(dest):
+            download_icon(url, dest)
+        result.setdefault(o["agent"], []).append({
+            "name": o["name"], "folder": safe_filename(o["name"]), "type": o["type"],
+            "image": fname if _icon_ok(dest) else None, "image_url": url,
+        })
+
+    all_agents = list(dict.fromkeys((characters or []) + list(result.keys())))
+    log(f"Downloading official portraits for {len(all_agents)} agents ...")
+    for i, ag in enumerate(all_agents, 1):
+        url = _zzz_file_url(f"Agent {ag} Portrait.png", 512)
+        fname = safe_filename(ag + " - Official") + ".png"
+        dest = os.path.join(image_dir, fname)
+        if url and not _icon_ok(dest):
+            download_icon(url, dest)
+        result.setdefault(ag, []).insert(0, {
+            "name": "Official", "folder": "Official", "type": "Default",
+            "image": fname if _icon_ok(dest) else None, "image_url": url,
+        })
+        if i % 20 == 0:
+            log(f"  official {i}/{len(all_agents)}")
+
+    skinned = sum(1 for v in result.values() if len(v) > 1)
+    log(f"Done. {len(result)} agents ({skinned} with skins).")
+    return result
+
+
 if __name__ == "__main__":
     # quick manual test
     here = os.path.dirname(os.path.abspath(__file__))

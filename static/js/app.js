@@ -5,6 +5,16 @@ const ELEMENT_COLORS = {
   Electro: "var(--Electro)", Anemo: "var(--Anemo)", Geo: "var(--Geo)",
   Dendro: "var(--Dendro)", None: "var(--None)",
 };
+// ZZZ attribute colors
+const ATTR_COLORS = {
+  Electric: "#c9e35a", Fire: "#ff7a59", Ice: "#7fe7ff", Frost: "#9fd0ff",
+  Ether: "#e07ad0", Physical: "#cdd3e0", "Auric Ink": "#e0c060", "Honed Edge": "#7fe7c0",
+};
+function facetColor(key, value) {
+  if (key === "element") return ELEMENT_COLORS[value] || null;
+  if (key === "attribute") return ATTR_COLORS[value] || null;
+  return null;
+}
 
 const state = {
   games: [],            // all supported games (with config merged)
@@ -55,6 +65,13 @@ function tChar(name) { return (state.locale?.characters?.[name]) || name; }
 function tOutfit(name) { return (state.locale?.outfits?.[name]) || name; }
 function tElement(e) { return (state.locale?.elements?.[e]) || e; }
 function tRegion(r) { return (state.locale?.regions?.[r]) || r; }
+// generic facet value translation (element->elements, region->regions, else identity)
+function tFacetValue(key, value) {
+  const sec = state.locale?.[key + "s"] || state.locale?.[key];
+  return (sec && sec[value]) || value;
+}
+function badgeFacet() { return state.facets.find((f) => f.badge); }
+function tagFacets() { return state.facets.filter((f) => !f.badge); }
 function tFacetLabel(key) { return (state.locale?.facets?.[key]) || key; }
 function tHotkeyType(ty) { return (state.locale?.hotkeyTypes?.[ty]) || ty; }
 
@@ -344,13 +361,11 @@ function buildFilterBar() {
         renderGrid();
       });
       opt.appendChild(cb);
-      if (f.key === "element") {
-        const d = el("span", "dot"); d.style.background = ELEMENT_COLORS[v] || "var(--None)"; opt.appendChild(d);
-      }
+      const col = facetColor(f.key, v);
+      if (col) { const d = el("span", "dot"); d.style.background = col; opt.appendChild(d); }
       let label = String(v);
       if (f.kind === "stars") label = `${v} ★`;
-      else if (f.key === "element") label = tElement(v);
-      else if (f.key === "region") label = tRegion(v);
+      else if (f.kind !== "badge") label = tFacetValue(f.key, v);
       opt.appendChild(el("span", "", label));
       menu.appendChild(opt);
     });
@@ -399,22 +414,25 @@ function renderGrid() {
   if (cc) cc.textContent = `${list.length} / ${state.characters.length}`;
 
   grid.innerHTML = "";
+  const bf = badgeFacet(), tf = tagFacets();
   list.forEach((ch) => {
-    const card = el("div", `poster char q${ch.quality || 0}`);
+    const badgeVal = bf ? ch[bf.key] : null;
+    const badgeText = badgeVal ? (bf.kind === "stars" ? `${badgeVal}★` : badgeVal) : "";
+    const borderCls = badgeVal ? (bf.kind === "stars" ? `q${badgeVal}` : `rank-${badgeVal}`) : "";
+    const card = el("div", `poster char ${borderCls}`);
     const iconSrc = ch.icon ? `/icons/${gid}/${encodeURIComponent(ch.icon)}` : (ch.icon_url || "");
-    const dot = ELEMENT_COLORS[ch.element] || "var(--None)";
-    const sub = [ch.element && ch.element !== "None" ? tElement(ch.element) : null,
-                 ch.region && ch.region !== "None" ? tRegion(ch.region) : null]
-                .filter(Boolean).join(" · ");
+    const dotColor = tf.length ? facetColor(tf[0].key, ch[tf[0].key]) : null;
+    const sub = tf.map((f) => { const v = ch[f.key]; return v && v !== "None" ? tFacetValue(f.key, v) : null; })
+                  .filter(Boolean).join(" · ");
     const modCount = state.modCounts[ch.name] || 0;
     card.innerHTML = `
       <div class="thumb">
-        ${ch.quality ? `<span class="badge-tl">${ch.quality}★</span>` : ""}
+        ${badgeText ? `<span class="badge-tl">${badgeText}</span>` : ""}
         ${modCount ? `<span class="badge-tr" title="${modCount} mods">${modCount}</span>` : ""}
         <img loading="lazy" alt="${tChar(ch.name)}" src="${iconSrc}">
       </div>
       <div class="p-title">${tChar(ch.name)}</div>
-      <div class="p-sub">${ch.element ? `<span class="dot" style="background:${dot}"></span>` : ""}${sub || "&nbsp;"}</div>`;
+      <div class="p-sub">${dotColor ? `<span class="dot" style="background:${dotColor}"></span>` : ""}${sub || "&nbsp;"}</div>`;
     const img = card.querySelector("img");
     if (img && ch.icon_url) img.onerror = () => { if (img.src !== ch.icon_url) img.src = ch.icon_url; };
     card.addEventListener("click", () => openCharacter(state.gameId, ch.name));
@@ -457,11 +475,12 @@ async function openCharacter(gid, charName) {
   $("#filterbar").classList.add("hidden");
   highlightNav();
 
-  const dot = ELEMENT_COLORS[ch.element] || "var(--None)";
-  const meta = [ch.quality ? `${ch.quality}★` : null,
-                ch.element && ch.element !== "None" ? tElement(ch.element) : null,
-                ch.region && ch.region !== "None" ? tRegion(ch.region) : null]
-    .filter(Boolean).join(" · ");
+  const bf = badgeFacet(), tf = tagFacets();
+  const dotColor = tf.length ? facetColor(tf[0].key, ch[tf[0].key]) : null;
+  const metaParts = [];
+  if (bf && ch[bf.key]) metaParts.push(bf.kind === "stars" ? `${ch[bf.key]}★` : ch[bf.key]);
+  tf.forEach((f) => { const v = ch[f.key]; if (v && v !== "None") metaParts.push(tFacetValue(f.key, v)); });
+  const meta = metaParts.join(" · ");
   const iconSrc = ch.icon ? `/icons/${gid}/${encodeURIComponent(ch.icon)}` : (ch.icon_url || "");
 
   state.outfit = "Official";   // reset to the default outfit on entry
@@ -475,7 +494,7 @@ async function openCharacter(gid, charName) {
       </button>` : ""}
       <div class="cd-meta">
         <h2>${tChar(ch.name)}</h2>
-        <div class="cd-sub">${ch.element ? `<span class="dot" style="background:${dot}"></span>` : ""}${meta || t("ui.models")}<span class="cd-outfit" id="cdOutfit"></span></div>
+        <div class="cd-sub">${dotColor ? `<span class="dot" style="background:${dotColor}"></span>` : ""}${meta || t("ui.models")}<span class="cd-outfit" id="cdOutfit"></span></div>
       </div>
     </div>
     <div class="outfit-switcher hidden" id="outfitSwitcher"></div>

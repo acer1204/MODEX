@@ -52,12 +52,26 @@ SUPPORTED_GAMES = {
         "icon": "⚔️",
         "source": "Fandom Wiki",
         "facets": [
-            {"key": "quality", "label": "稀有度", "kind": "stars"},
+            {"key": "quality", "label": "稀有度", "kind": "stars", "badge": True},
             {"key": "element", "label": "元素", "kind": "tag"},
             {"key": "region", "label": "地區", "kind": "tag"},
         ],
         "scraper": scraper.scrape,
         "outfit_scraper": scraper.scrape_outfits,
+    },
+    "zzz": {
+        "id": "zzz",
+        "name": "Zenless Zone Zero",
+        "name_zh": "絕區零",
+        "icon": "🌀",
+        "source": "Fandom Wiki",
+        "facets": [
+            {"key": "rank", "label": "Rank", "kind": "badge", "badge": True},
+            {"key": "attribute", "label": "Attribute", "kind": "tag"},
+            {"key": "attacktype", "label": "Attack Type", "kind": "tag"},
+        ],
+        "scraper": scraper.scrape_zzz,
+        "outfit_scraper": scraper.scrape_zzz_outfits,
     },
 }
 

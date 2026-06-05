@@ -92,7 +92,10 @@
   "facets": {
     "quality": "稀有度",
     "element": "元素",
-    "region": "地區"
+    "region": "地區",
+    "rank": "等級",
+    "attribute": "屬性",
+    "attacktype": "攻擊類型"
   },
   "hotkeyTypes": {
     "cycle": "循環",
@@ -119,6 +122,25 @@
     "Natlan": "納塔",
     "Snezhnaya": "至冬",
     "Nod-Krai": "挪德卡萊",
+    "None": "無"
+  },
+  "attributes": {
+    "Electric": "電氣",
+    "Fire": "火",
+    "Ice": "冰",
+    "Frost": "烈霜",
+    "Ether": "以太",
+    "Physical": "物理",
+    "Auric Ink": "玄墨",
+    "Honed Edge": "磨鋒",
+    "None": "無"
+  },
+  "attacktypes": {
+    "Slash": "斬擊",
+    "Strike": "打擊",
+    "Pierce": "穿透",
+    "Pierce / Slash": "穿透 / 斬擊",
+    "Slash / Strike": "斬擊 / 打擊",
     "None": "無"
   },
   "characters": {
@@ -266,6 +288,25 @@
     "To the Church's Free Spirit": "致教會自由人",
     "Toward the Distant Horizon": "故事的遠方",
     "Tranquil Banquet": "靜暇雅宴",
-    "Twilight Blossom": "玄玉瑤芳"
+    "Twilight Blossom": "玄玉瑤芳",
+    "Afternoon Tea Break": "午後茶歇",
+    "Chandelier": "璀璨吊燈",
+    "Culinary Jewel": "庖廚珍寶",
+    "Cunning Cutie": "狡黠甜心",
+    "Delicate Sunlight": "細膩晴光",
+    "Dignified Blossom": "端莊之花",
+    "Discordant Note": "不諧之音",
+    "Iris of the Shore": "彼岸鳶尾",
+    "Nocturne of Light": "光之夜曲",
+    "On Campus": "校園時光",
+    "Peaceful Waves": "寧靜波瀾",
+    "Rhapsody's Muse": "狂想繆思",
+    "Sea of Thyme": "百里香之海",
+    "Soaring Crane": "翔鶴",
+    "Summer Skies": "夏日晴空",
+    "Tanuki in Broad Daylight": "白晝狸貓",
+    "Touch of Dawnlight": "拂曉微光",
+    "Trails of Ink": "墨痕",
+    "White Heart Silhouette": "純白剪影"
   }
 }
