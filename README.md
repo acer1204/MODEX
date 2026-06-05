@@ -6,6 +6,16 @@ Emby 風格、瀏覽器操作的**遊戲角色 Mod 管理器**（對應 3DMigoto
 > Frontend: HTML / CSS / vanilla JS · Backend: Python (Flask)<br>
 > 前端：HTML / CSS / 原生 JS · 後端：Python（Flask）
 
+## Supported games / 目前支援的遊戲
+
+| Game / 遊戲 | Filters / 篩選 | Data source / 資料來源 |
+| :--- | :--- | :--- |
+| ⚔️ **Genshin Impact** / 原神 | Quality · Element · Region / 稀有度 · 元素 · 地區 | Fandom Wiki |
+| 🌀 **Zenless Zone Zero** / 絕區零 | Rank · Attribute · Faction / 等級 · 屬性 · 陣營 | Fandom Wiki |
+
+More games can be added by registering a scraper and its filter facets in `SUPPORTED_GAMES` (`app.py`).<br>
+要新增其他遊戲，只要在 `app.py` 的 `SUPPORTED_GAMES` 註冊一個 scraper 與其篩選欄位即可。
+
 ## Screenshots / 畫面
 
 | Library — browse characters / 圖庫瀏覽 | Character & models / 角色與模型 |
