@@ -422,7 +422,7 @@ def api_game_refresh(gid):
     # alternate outfits / skins (best-effort — don't fail the whole refresh)
     if g.get("outfit_scraper"):
         try:
-            outfits = g["outfit_scraper"](outfit_img_dir(gid))
+            outfits = g["outfit_scraper"](outfit_img_dir(gid), [c["name"] for c in chars])
             save_json(outfits_path(gid), outfits)
         except Exception:
             pass
@@ -837,21 +837,26 @@ def api_game_outfits(gid):
     character = request.args.get("character", "")
     stored = load_json(outfits_path(gid), {}).get(character, [])
 
+    chars = load_json(characters_path(gid), [])
+    ch = next((c for c in chars if c.get("name") == character), None)
+    icon_img = (f"/icons/{gid}/{ch['icon']}" if ch and ch.get("icon")
+                else (ch.get("icon_url") if ch else None))
+
     def img_of(s):
-        return f"/outfits/{gid}/{s['image']}" if s.get("image") else s.get("image_url")
+        if s.get("image"):
+            return f"/outfits/{gid}/{s['image']}"
+        # official falls back to the character icon when no wish art was found
+        return s.get("image_url") or (icon_img if s.get("folder") == OFFICIAL else None)
 
     if stored:
         outfits = [{"name": s["name"], "folder": s["folder"], "type": s.get("type"),
                     "image_url": img_of(s)} for s in stored]
         return jsonify({"ok": True, "outfits": outfits, "has_skins": len(stored) > 1})
 
-    chars = load_json(characters_path(gid), [])
-    ch = next((c for c in chars if c.get("name") == character), None)
-    official_img = (f"/icons/{gid}/{ch['icon']}" if ch and ch.get("icon")
-                    else (ch.get("icon_url") if ch else None))
+    # no outfit data yet — single Official entry using the character icon
     return jsonify({
         "ok": True,
-        "outfits": [{"name": OFFICIAL, "folder": OFFICIAL, "type": "Default", "image_url": official_img}],
+        "outfits": [{"name": OFFICIAL, "folder": OFFICIAL, "type": "Default", "image_url": icon_img}],
         "has_skins": False,
     })
 

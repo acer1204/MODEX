@@ -473,10 +473,10 @@ async function openCharacter(gid, charName) {
   const openBtn = $("#cdOpenFolder");
   if (openBtn) openBtn.addEventListener("click", () => openCharacterFolder(gid, charName, state.outfit));
 
-  // outfit switcher (Official + alternate skins)
+  // outfit switcher — always shown (Official by default, + any alternate skins)
   try {
     const od = await api(`/api/games/${gid}/outfits?character=${encodeURIComponent(charName)}`);
-    if (od.has_skins) renderOutfitSwitcher(gid, charName, od.outfits);
+    if (od.outfits && od.outfits.length) renderOutfitSwitcher(gid, charName, od.outfits);
   } catch (_) {}
 
   renderOutfitModels(gid, charName);

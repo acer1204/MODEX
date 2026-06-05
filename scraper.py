@@ -195,14 +195,15 @@ def _fetch_parse(page, prop="text"):
     return r.json().get("parse", {}).get(prop)
 
 
-def _file_url(filename):
-    """Return the CDN url for a wiki File:, or None."""
+def _file_url(filename, width=512):
+    """Return a scaled CDN thumbnail url for a wiki File:, or None."""
     try:
         params = {"action": "query", "titles": "File:" + filename, "prop": "imageinfo",
-                  "iiprop": "url", "format": "json", "formatversion": "2"}
+                  "iiprop": "url", "iiurlwidth": width, "format": "json", "formatversion": "2"}
         pages = requests.get(API_URL, params=params, headers=HEADERS, timeout=60).json().get("query", {}).get("pages", [])
         if pages and "imageinfo" in pages[0]:
-            return pages[0]["imageinfo"][0]["url"]
+            info = pages[0]["imageinfo"][0]
+            return info.get("thumburl") or info.get("url")
     except Exception:
         pass
     return None
@@ -224,17 +225,7 @@ def _wish_image_url(outfit_name, character):
                 if fn:
                     files.append(fn)
     pick = next((f for f in files if "wish" in f.lower()), None) or (files[0] if files else None)
-    if not pick:
-        return None
-    try:
-        params = {"action": "query", "titles": "File:" + pick, "prop": "imageinfo",
-                  "iiprop": "url", "format": "json", "formatversion": "2"}
-        pages = requests.get(API_URL, params=params, headers=HEADERS, timeout=60).json().get("query", {}).get("pages", [])
-        if pages and "imageinfo" in pages[0]:
-            return pages[0]["imageinfo"][0]["url"]
-    except Exception:
-        pass
-    return None
+    return _file_url(pick) if pick else None
 
 
 def parse_outfits(html):
@@ -261,9 +252,13 @@ def parse_outfits(html):
     return outfits
 
 
-def scrape_outfits(image_dir, progress=None):
-    """Build {character: [{name, folder, type, image}]} for non-default outfits
-    (themed / alternate skins), downloading each skin's wish art locally."""
+def scrape_outfits(image_dir, characters=None, progress=None):
+    """Build {character: [outfits]} for every character.
+
+    Every character gets an "Official" entry (with the character's wish art);
+    characters with alternate outfits also get a Themed/Alternate skin entry.
+    ``characters`` = list of character names to ensure an Official entry for
+    (so skin-less characters are unified too)."""
     def log(msg):
         if progress:
             progress(msg)
@@ -292,9 +287,11 @@ def scrape_outfits(image_dir, progress=None):
         if i % 5 == 0:
             log(f"  outfits {i}/{len(skins)}")
 
-    # prepend an "Official" entry (default outfit) using the character's wish art
-    log("Downloading official wish art ...")
-    for ch in list(result.keys()):
+    # prepend an "Official" entry (default outfit, with wish art) for EVERY
+    # character so skin-less characters share the same UI.
+    all_chars = list(dict.fromkeys((characters or []) + list(result.keys())))
+    log(f"Downloading official wish art for {len(all_chars)} characters ...")
+    for i, ch in enumerate(all_chars, 1):
         url = _file_url(f"Character {ch} Full Wish.png")
         fname = safe_filename(ch + " - Official") + ".png"
         dest = os.path.join(image_dir, fname)
@@ -307,9 +304,12 @@ def scrape_outfits(image_dir, progress=None):
             "image": fname if _icon_ok(dest) else None,
             "image_url": url,
         }
-        result[ch].insert(0, official)
+        result.setdefault(ch, []).insert(0, official)
+        if i % 20 == 0:
+            log(f"  official wish {i}/{len(all_chars)}")
 
-    log(f"Done. {len(result)} characters have alternate outfits.")
+    skinned = sum(1 for v in result.values() if len(v) > 1)
+    log(f"Done. {len(result)} characters ({skinned} with alternate outfits).")
     return result
 
 
