@@ -340,6 +340,7 @@ body {
 .outfit-card {
   width: 116px; padding: 0; border: 2px solid var(--line); background: var(--panel);
   border-radius: 12px; overflow: hidden; cursor: pointer; text-align: left;
+  color: var(--text);   /* buttons don't inherit page color — set it explicitly */
   transition: border-color .15s, transform .12s;
 }
 .outfit-card:hover { transform: translateY(-3px); border-color: var(--line-2); }
