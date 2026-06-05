@@ -213,6 +213,18 @@ def _previews_of(model_path: str):
     return [{"file": f, "kind": media_kind(f)} for f in _apply_order(model_path, _list_media(model_path))]
 
 
+def count_models(model_dir: str, exclude=None):
+    """Count model subfolders in a directory (excluding given names)."""
+    if not os.path.isdir(model_dir):
+        return 0
+    exclude = {e.lower() for e in (exclude or set())}
+    n = 0
+    for entry in os.listdir(model_dir):
+        if os.path.isdir(os.path.join(model_dir, entry)) and strip_disabled(entry).lower() not in exclude:
+            n += 1
+    return n
+
+
 def list_models(char_dir: str, exclude=None):
     """Return the model folders under a directory with display info.
     ``exclude`` = set of folder names to skip (e.g. outfit subfolders)."""
@@ -434,6 +446,36 @@ def api_game_characters(gid):
     require_game(gid)
     chars = load_json(characters_path(gid), [])
     return jsonify({"characters": chars, "count": len(chars), "game": public_game(gid)})
+
+
+@app.route("/api/games/<gid>/mod-counts")
+def api_game_mod_counts(gid):
+    """Total mod (model folder) count per character, summed across all outfits."""
+    require_game(gid)
+    folder = _mods_folder(gid)
+    if not folder or not os.path.isdir(folder):
+        return jsonify({"ok": True, "counts": {}})
+
+    chars = load_json(characters_path(gid), [])
+    all_outfits = load_json(outfits_path(gid), {})
+    counts = {}
+    for ch in chars:
+        name = ch.get("name", "")
+        char_dir = _safe_join(folder, scraper.safe_filename(name))
+        if not os.path.isdir(char_dir):
+            continue
+        skins = [o["folder"] for o in all_outfits.get(name, []) if o.get("folder") != OFFICIAL]
+        # official = Official/ subfolder, or the char root (excluding skin folders)
+        off = os.path.join(char_dir, OFFICIAL)
+        if os.path.isdir(off):
+            total = count_models(off)
+        else:
+            total = count_models(char_dir, _skin_folders(gid, name))
+        for skin in skins:
+            total += count_models(_safe_join(char_dir, scraper.safe_filename(skin)))
+        if total:
+            counts[name] = total
+    return jsonify({"ok": True, "counts": counts})
 
 
 @app.route("/api/games/<gid>/generate-folders", methods=["POST"])

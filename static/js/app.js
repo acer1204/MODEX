@@ -16,6 +16,7 @@ const state = {
   search: "",
   edit: null,           // { gid, character, folder, outfit } when in edit view
   outfit: "Official",   // current outfit/skin on the character detail page
+  modCounts: {},        // { characterName: total mod count }
   lang: "en",           // current language code
   locale: null,         // loaded translation object
   locales: [],          // available [{code, name}]
@@ -293,6 +294,13 @@ async function openLibrary(gid) {
     return;
   }
 
+  // mod counts per character (best-effort; re-renders the grid when ready)
+  state.modCounts = {};
+  api(`/api/games/${gid}/mod-counts`).then((d) => {
+    state.modCounts = d.counts || {};
+    if (state.view === "library") renderGrid();
+  }).catch(() => {});
+
   if (!state.characters.length) {
     c.innerHTML = `<div class="empty-state">
       <div class="big">📥</div>
@@ -398,9 +406,11 @@ function renderGrid() {
     const sub = [ch.element && ch.element !== "None" ? tElement(ch.element) : null,
                  ch.region && ch.region !== "None" ? tRegion(ch.region) : null]
                 .filter(Boolean).join(" · ");
+    const modCount = state.modCounts[ch.name] || 0;
     card.innerHTML = `
       <div class="thumb">
         ${ch.quality ? `<span class="badge-tl">${ch.quality}★</span>` : ""}
+        ${modCount ? `<span class="badge-tr" title="${modCount} mods">${modCount}</span>` : ""}
         <img loading="lazy" alt="${tChar(ch.name)}" src="${iconSrc}">
       </div>
       <div class="p-title">${tChar(ch.name)}</div>
