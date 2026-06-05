@@ -95,7 +95,7 @@
     "region": "Region",
     "rank": "Rank",
     "attribute": "Attribute",
-    "attacktype": "Attack Type"
+    "faction": "Faction"
   },
   "hotkeyTypes": {
     "cycle": "Cycle",
@@ -135,12 +135,22 @@
     "Honed Edge": "Honed Edge",
     "None": "None"
   },
-  "attacktypes": {
-    "Slash": "Slash",
-    "Strike": "Strike",
-    "Pierce": "Pierce",
-    "Pierce / Slash": "Pierce / Slash",
-    "Slash / Strike": "Slash / Strike",
+  "factions": {
+    "Angels of Delusion": "Angels of Delusion",
+    "Belobog Heavy Industries": "Belobog Heavy Industries",
+    "Criminal Investigation Special Response Team": "Criminal Investigation Special Response Team",
+    "Cunning Hares": "Cunning Hares",
+    "Defense Force - Silver Squad": "Defense Force - Silver Squad",
+    "Hollow Special Operations Section 6": "Hollow Special Operations Section 6",
+    "Krampus Compliance Authority": "Krampus Compliance Authority",
+    "Metropolitan Order Division": "Metropolitan Order Division",
+    "Mockingbird": "Mockingbird",
+    "Obol Squad": "Obol Squad",
+    "Sons of Calydon": "Sons of Calydon",
+    "Spook Shack": "Spook Shack",
+    "Stars of Lyra": "Stars of Lyra",
+    "Victoria Housekeeping Co.": "Victoria Housekeeping Co.",
+    "Yunkui Summit": "Yunkui Summit",
     "None": "None"
   },
   "characters": {

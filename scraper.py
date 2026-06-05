@@ -370,13 +370,13 @@ def parse_zzz_agents(html):
                 "icon_url": _clean_icon_url(_img_src(c[0].find("img"))),
                 "rank": rank,
                 "attribute": c[3].get_text(strip=True),
-                "attacktype": _clean_attack(c[5].get_text(strip=True)),
+                "faction": c[6].get_text(strip=True) if len(c) > 6 else "",
             })
     return agents
 
 
 def scrape_zzz(icon_dir, progress=None):
-    """Scrape ZZZ Protagonist + Playable agents -> [{name, icon, rank, attribute, attacktype}]."""
+    """Scrape ZZZ Protagonist + Playable agents -> [{name, icon, rank, attribute, faction}]."""
     def log(msg):
         if progress:
             progress(msg)
@@ -387,7 +387,7 @@ def scrape_zzz(icon_dir, progress=None):
     prot = []
     for name in ZZZ_PROTAGONISTS:
         prot.append({"name": name, "icon_url": _zzz_file_url(f"Agent {name} Icon.png"),
-                     "rank": "", "attribute": "", "attacktype": ""})
+                     "rank": "", "attribute": "", "faction": ""})
     agents = prot + agents
     log(f"Parsed {len(agents)} agents. Downloading icons ...")
 

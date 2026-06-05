@@ -95,7 +95,7 @@
     "region": "地区",
     "rank": "等级",
     "attribute": "属性",
-    "attacktype": "攻击类型"
+    "faction": "阵营"
   },
   "hotkeyTypes": {
     "cycle": "循环",
@@ -135,12 +135,22 @@
     "Honed Edge": "磨锋",
     "None": "无"
   },
-  "attacktypes": {
-    "Slash": "斩击",
-    "Strike": "打击",
-    "Pierce": "穿透",
-    "Pierce / Slash": "穿透 / 斩击",
-    "Slash / Strike": "斩击 / 打击",
+  "factions": {
+    "Angels of Delusion": "妄想天使",
+    "Belobog Heavy Industries": "白祊重工",
+    "Criminal Investigation Special Response Team": "刑事侦查特别应对组",
+    "Cunning Hares": "狡兔屋",
+    "Defense Force - Silver Squad": "防卫军－白银小队",
+    "Hollow Special Operations Section 6": "空洞特别行动部第六课",
+    "Krampus Compliance Authority": "坎卜斯合规局",
+    "Metropolitan Order Division": "都市秩序部",
+    "Mockingbird": "反舌鸟",
+    "Obol Squad": "奥伯尔小队",
+    "Sons of Calydon": "卡吕冬之子",
+    "Spook Shack": "怪奇事务所",
+    "Stars of Lyra": "天琴座之星",
+    "Victoria Housekeeping Co.": "维多利亚家政",
+    "Yunkui Summit": "云岿山",
     "None": "无"
   },
   "characters": {

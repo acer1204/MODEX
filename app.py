@@ -68,7 +68,7 @@ SUPPORTED_GAMES = {
         "facets": [
             {"key": "rank", "label": "Rank", "kind": "badge", "badge": True},
             {"key": "attribute", "label": "Attribute", "kind": "tag"},
-            {"key": "attacktype", "label": "Attack Type", "kind": "tag"},
+            {"key": "faction", "label": "Faction", "kind": "tag"},
         ],
         "scraper": scraper.scrape_zzz,
         "outfit_scraper": scraper.scrape_zzz_outfits,
