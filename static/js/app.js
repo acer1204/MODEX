@@ -81,10 +81,11 @@ async function loadLocale() {
     state.lang = appcfg.language || "en";
     state.locales = appcfg.locales || [];
   } catch (_) { state.lang = "en"; }
+  const bust = `?v=${Date.now()}`;   // cache-bust so edited/switched locales never serve stale
   try {
-    state.locale = await (await fetch(`/locales/${state.lang}.json`)).json();
+    state.locale = await (await fetch(`/locales/${state.lang}.json${bust}`, { cache: "no-store" })).json();
   } catch (_) {
-    state.locale = await (await fetch(`/locales/en.json`)).json();
+    state.locale = await (await fetch(`/locales/en.json${bust}`, { cache: "no-store" })).json();
   }
 }
 
@@ -234,7 +235,7 @@ function renderSidebar() {
     const item = el("a", "nav-item");
     item.dataset.game = g.id;
     item.innerHTML = `<span class="nav-ico">${g.icon || "🎮"}</span>
-      <span class="nav-label">${g.name_zh || g.name}</span>`;
+      <span class="nav-label">${gameLabel(g)}</span>`;
     item.addEventListener("click", () => openLibrary(g.id));
     nav.appendChild(item);
   });
