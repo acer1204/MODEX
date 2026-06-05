@@ -37,6 +37,8 @@ Demo data uses official character art for previews.
   **多遊戲架構** — 遊戲註冊在 `app.py` 的 `SUPPORTED_GAMES`，目前內建原神（Genshin Impact）。
 - **Offline-friendly** — character icons are downloaded locally on refresh, so browsing works without a connection.
   **離線可用** — 角色頭像在更新時下載到本機，之後離線也能瀏覽。
+- **Multi-language** — English / Traditional Chinese / Simplified Chinese (default English). Character, element and region names are translated; folder names always stay English. Translations live in editable files under `locales/`.
+  **多國語言** — 英文 / 繁體中文 / 簡體中文（預設英文）。角色、元素、地區名稱會翻譯；資料夾名稱一律維持英文。翻譯放在 `locales/` 內，可自行編輯調整。
 
 ## Requirements / 環境需求
 

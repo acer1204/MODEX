@@ -15,6 +15,9 @@ const state = {
   filters: {},          // { facetKey: Set(values) }
   search: "",
   edit: null,           // { gid, character, folder } when in edit view
+  lang: "en",           // current language code
+  locale: null,         // loaded translation object
+  locales: [],          // available [{code, name}]
 };
 
 // ---------- dom helpers ----------
@@ -27,6 +30,61 @@ function el(tag, cls, html) {
   return e;
 }
 function gameById(id) { return state.games.find((g) => g.id === id); }
+function gameLabel(g) { return state.lang.startsWith("zh") ? (g.name_zh || g.name) : g.name; }
+
+// ---------- i18n ----------
+// t("ui.save") / t("ui.updatedChars", {n: 5}); falls back to the path if missing.
+function t(path, vars) {
+  let cur = state.locale;
+  for (const part of path.split(".")) {
+    cur = cur && cur[part];
+    if (cur == null) break;
+  }
+  let s = (typeof cur === "string") ? cur : path;
+  if (vars) for (const k in vars) s = s.replaceAll(`{${k}}`, vars[k]);
+  return s;
+}
+function tList(path) {
+  const cur = path.split(".").reduce((o, p) => (o ? o[p] : null), state.locale);
+  return Array.isArray(cur) ? cur : [];
+}
+// data lookups — fall back to the raw English value when a translation is absent
+function tChar(name) { return (state.locale?.characters?.[name]) || name; }
+function tElement(e) { return (state.locale?.elements?.[e]) || e; }
+function tRegion(r) { return (state.locale?.regions?.[r]) || r; }
+function tFacetLabel(key) { return (state.locale?.facets?.[key]) || key; }
+function tHotkeyType(ty) { return (state.locale?.hotkeyTypes?.[ty]) || ty; }
+
+async function loadLocale() {
+  try {
+    const appcfg = await api("/api/app");
+    state.lang = appcfg.language || "en";
+    state.locales = appcfg.locales || [];
+  } catch (_) { state.lang = "en"; }
+  try {
+    state.locale = await (await fetch(`/locales/${state.lang}.json`)).json();
+  } catch (_) {
+    state.locale = await (await fetch(`/locales/en.json`)).json();
+  }
+}
+
+// translate the static markup in index.html (sidebar / topbar)
+function applyStaticI18n() {
+  const set = (sel, val, attr) => {
+    const e = $(sel);
+    if (!e) return;
+    if (attr) e.setAttribute(attr, val); else e.textContent = val;
+  };
+  set("#nav-home .nav-label", t("ui.home"));
+  set(".side-section-title", t("ui.gameLibraries"));
+  set("#globalSearch", t("ui.search"), "placeholder");
+  set("#btnSettings", t("ui.settings"), "title");
+  set("#btnBell", t("ui.notifications"), "title");
+  set("#navBack", t("ui.back"), "title");
+  set("#navFwd", t("ui.forward"), "title");
+  const se = $("#sideEmpty span"); if (se) se.textContent = t("ui.noGamesEnabled");
+  const so = $("#sideOpenSettings"); if (so) so.textContent = t("ui.goToSettings");
+}
 
 // ---------- in-app navigation history (back / forward) ----------
 const navHist = { stack: [], idx: -1 };
@@ -96,8 +154,20 @@ async function api(url, opts) {
 // ===================== init =====================
 async function init() {
   wireChrome();
+  await loadLocale();
+  applyStaticI18n();
   await loadGames();
   showHome();
+}
+
+async function changeLanguage(code) {
+  try {
+    await api("/api/app", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language: code }),
+    });
+    location.reload();   // re-init with the new locale everywhere
+  } catch (e) { toast(`❌ ${e.message}`, "err"); }
 }
 
 function wireChrome() {
@@ -107,7 +177,7 @@ function wireChrome() {
   $("#nav-home").addEventListener("click", showHome);
   $("#btnSettings").addEventListener("click", showSettings);
   $("#sideOpenSettings").addEventListener("click", showSettings);
-  $("#btnBell").addEventListener("click", () => toast("目前沒有通知", "info"));
+  $("#btnBell").addEventListener("click", () => toast(t("ui.noNotifications"), "info"));
   $("#navBack").addEventListener("click", navBack);
   $("#navFwd").addEventListener("click", navFwd);
   $("#globalSearch").addEventListener("input", (e) => {
@@ -165,7 +235,7 @@ function setCrumb(title) { $("#crumbTitle").textContent = title; }
 function showHome() {
   pushRoute({ view: "home", gameId: null });
   state.view = "home";
-  setCrumb("首頁");
+  setCrumb(t("ui.home"));
   $("#filterbar").classList.add("hidden");
   highlightNav();
   const c = $("#content");
@@ -174,22 +244,22 @@ function showHome() {
   if (!enabled.length) {
     c.innerHTML = `<div class="empty-state">
       <div class="big">🎮</div>
-      <p>還沒有啟用任何遊戲庫。</p>
-      <p>點右上角 <b>⚙️ 設定</b>，勾選遊戲並設定 Mods 資料夾後保存。</p>
-      <button class="btn btn-primary" id="homeSettings">前往設定</button>
+      <p>${t("ui.noGamesHomeTitle")}</p>
+      <p>${t("ui.noGamesHomeHint")}</p>
+      <button class="btn btn-primary" id="homeSettings">${t("ui.goToSettingsBtn")}</button>
     </div>`;
     $("#homeSettings").addEventListener("click", showSettings);
     return;
   }
-  c.innerHTML = `<div class="section-head"><h2>遊戲庫</h2>
-    <span class="count">${enabled.length} 個</span></div>
+  c.innerHTML = `<div class="section-head"><h2>${t("ui.gameLibraries")}</h2>
+    <span class="count">${t("ui.gamesCount", { n: enabled.length })}</span></div>
     <div class="poster-grid" id="homeGrid"></div>`;
   const grid = $("#homeGrid");
   enabled.forEach((g) => {
     const card = el("div", "poster");
     card.innerHTML = `<div class="thumb" style="display:flex;align-items:center;justify-content:center;font-size:60px;">${g.icon || "🎮"}</div>
-      <div class="p-title">${g.name_zh || g.name}</div>
-      <div class="p-sub">${g.char_count} 位角色</div>`;
+      <div class="p-title">${gameLabel(g)}</div>
+      <div class="p-sub">${t("ui.charsCount", { n: g.char_count })}</div>`;
     card.addEventListener("click", () => openLibrary(g.id));
     grid.appendChild(card);
   });
@@ -205,11 +275,11 @@ async function openLibrary(gid) {
   state.facets = g.facets || [];
   restoreFilters(gid);                  // keep prior search/filter conditions
   $("#globalSearch").value = state.search;
-  setCrumb(g.name_zh || g.name);
+  setCrumb(gameLabel(g));
   highlightNav();
 
   const c = $("#content");
-  c.innerHTML = `<div class="empty-state">載入中…</div>`;
+  c.innerHTML = `<div class="empty-state">${t("ui.loading")}</div>`;
   $("#filterbar").classList.add("hidden");
 
   try {
@@ -223,8 +293,8 @@ async function openLibrary(gid) {
   if (!state.characters.length) {
     c.innerHTML = `<div class="empty-state">
       <div class="big">📥</div>
-      <p>「${g.name_zh || g.name}」尚未爬取角色資料。</p>
-      <button class="btn btn-primary" id="libRefresh">更新角色資料</button>
+      <p>${gameLabel(g)}</p>
+      <button class="btn btn-primary" id="libRefresh">${t("ui.updateChars")}</button>
     </div>`;
     $("#libRefresh").addEventListener("click", () => refreshGame(gid, true));
     return;
@@ -232,7 +302,7 @@ async function openLibrary(gid) {
 
   buildFilterBar();
   c.innerHTML = `<div class="section-head"><span class="badge">📺</span>
-      <h2>角色</h2><span class="count" id="charCount"></span></div>
+      <h2>${t("ui.characters")}</h2><span class="count" id="charCount"></span></div>
     <div class="poster-grid char" id="charGrid"></div>`;
   renderGrid();
 }
@@ -248,7 +318,7 @@ function buildFilterBar() {
 
     const activeSet = state.filters[f.key] || new Set();
     const drop = el("div", "fdrop");
-    const btn = el("button", activeSet.size ? "has-active" : "", `${f.label} <span class="caret">▾</span>`);
+    const btn = el("button", activeSet.size ? "has-active" : "", `${tFacetLabel(f.key)} <span class="caret">▾</span>`);
     const menu = el("div", "menu hidden");
 
     values.forEach((v) => {
@@ -266,7 +336,10 @@ function buildFilterBar() {
       if (f.key === "element") {
         const d = el("span", "dot"); d.style.background = ELEMENT_COLORS[v] || "var(--None)"; opt.appendChild(d);
       }
-      const label = f.kind === "stars" ? `${v} ★` : String(v);
+      let label = String(v);
+      if (f.kind === "stars") label = `${v} ★`;
+      else if (f.key === "element") label = tElement(v);
+      else if (f.key === "region") label = tRegion(v);
       opt.appendChild(el("span", "", label));
       menu.appendChild(opt);
     });
@@ -281,7 +354,7 @@ function buildFilterBar() {
     bar.appendChild(drop);
   });
 
-  const reset = el("button", "btn filter-reset", "重設檢索");
+  const reset = el("button", "btn filter-reset", t("ui.resetFilters"));
   reset.addEventListener("click", () => {
     Object.values(state.filters).forEach((s) => s.clear());
     state.search = ""; $("#globalSearch").value = "";
@@ -298,7 +371,11 @@ function matches(ch) {
     const set = state.filters[f.key];
     if (set && set.size && !set.has(String(ch[f.key]))) return false;
   }
-  if (state.search && !String(ch.name).toLowerCase().includes(state.search)) return false;
+  if (state.search) {
+    const q = state.search;
+    const hit = String(ch.name).toLowerCase().includes(q) || String(tChar(ch.name)).toLowerCase().includes(q);
+    if (!hit) return false;
+  }
   return true;
 }
 
@@ -315,13 +392,15 @@ function renderGrid() {
     const card = el("div", `poster char q${ch.quality || 0}`);
     const iconSrc = ch.icon ? `/icons/${gid}/${encodeURIComponent(ch.icon)}` : (ch.icon_url || "");
     const dot = ELEMENT_COLORS[ch.element] || "var(--None)";
-    const sub = [ch.element, ch.region].filter((x) => x && x !== "None").join(" · ");
+    const sub = [ch.element && ch.element !== "None" ? tElement(ch.element) : null,
+                 ch.region && ch.region !== "None" ? tRegion(ch.region) : null]
+                .filter(Boolean).join(" · ");
     card.innerHTML = `
       <div class="thumb">
         ${ch.quality ? `<span class="badge-tl">${ch.quality}★</span>` : ""}
-        <img loading="lazy" alt="${ch.name}" src="${iconSrc}">
+        <img loading="lazy" alt="${tChar(ch.name)}" src="${iconSrc}">
       </div>
-      <div class="p-title">${ch.name}</div>
+      <div class="p-title">${tChar(ch.name)}</div>
       <div class="p-sub">${ch.element ? `<span class="dot" style="background:${dot}"></span>` : ""}${sub || "&nbsp;"}</div>`;
     const img = card.querySelector("img");
     if (img && ch.icon_url) img.onerror = () => { if (img.src !== ch.icon_url) img.src = ch.icon_url; };
@@ -331,15 +410,15 @@ function renderGrid() {
 }
 
 async function refreshGame(gid, reopen) {
-  toast("正在從來源爬取角色資料與圖示…", "info", 0);
+  toast(t("ui.refreshingChars"), "info", 0);
   try {
     const data = await api(`/api/games/${gid}/refresh`, { method: "POST" });
     await loadGames();
-    toast(`✅ 已更新 ${data.count} 位角色`, "ok");
+    toast(t("ui.updatedChars", { n: data.count }), "ok");
     if (reopen) openLibrary(gid);
     else if (state.view === "settings") showSettings();
   } catch (e) {
-    toast(`❌ 更新失敗：${e.message}`, "err", 6000);
+    toast(t("ui.updateFailed", { msg: e.message }), "err", 6000);
   }
 }
 
@@ -361,28 +440,30 @@ async function openCharacter(gid, charName) {
 
   const g = gameById(gid);
   const ch = state.characters.find((c) => c.name === charName) || { name: charName };
-  setCrumb(`${(g && (g.name_zh || g.name)) || ""} · ${charName}`);
+  setCrumb(`${(g && gameLabel(g)) || ""} · ${tChar(charName)}`);
   $("#filterbar").classList.add("hidden");
   highlightNav();
 
   const dot = ELEMENT_COLORS[ch.element] || "var(--None)";
-  const meta = [ch.quality ? `${ch.quality}★` : "", ch.element, ch.region]
-    .filter((x) => x && x !== "None").join(" · ");
+  const meta = [ch.quality ? `${ch.quality}★` : null,
+                ch.element && ch.element !== "None" ? tElement(ch.element) : null,
+                ch.region && ch.region !== "None" ? tRegion(ch.region) : null]
+    .filter(Boolean).join(" · ");
   const iconSrc = ch.icon ? `/icons/${gid}/${encodeURIComponent(ch.icon)}` : (ch.icon_url || "");
 
   const c = $("#content");
   c.innerHTML = `
     <div class="char-detail-head">
-      ${iconSrc ? `<button class="cd-icon-btn" id="cdOpenFolder" title="開啟此角色的資料夾">
-        <img class="cd-icon" src="${iconSrc}" alt="${ch.name}">
+      ${iconSrc ? `<button class="cd-icon-btn" id="cdOpenFolder" title="${t("ui.openFolderTip")}">
+        <img class="cd-icon" src="${iconSrc}" alt="${tChar(ch.name)}">
         <span class="cd-icon-overlay">📂</span>
       </button>` : ""}
       <div class="cd-meta">
-        <h2>${ch.name}</h2>
-        <div class="cd-sub">${ch.element ? `<span class="dot" style="background:${dot}"></span>` : ""}${meta || "模型"}</div>
+        <h2>${tChar(ch.name)}</h2>
+        <div class="cd-sub">${ch.element ? `<span class="dot" style="background:${dot}"></span>` : ""}${meta || t("ui.models")}</div>
       </div>
     </div>
-    <div class="model-list" id="modelGrid"><div class="model-empty">載入中…</div></div>`;
+    <div class="model-list" id="modelGrid"><div class="model-empty">${t("ui.loading")}</div></div>`;
 
   const openBtn = $("#cdOpenFolder");
   if (openBtn) openBtn.addEventListener("click", () => openCharacterFolder(gid, charName));
@@ -391,10 +472,10 @@ async function openCharacter(gid, charName) {
   try {
     const data = await api(`/api/games/${gid}/models?character=${encodeURIComponent(charName)}`);
     if (!data.char_dir_exists) {
-      box.innerHTML = `<div class="model-empty">尚未建立此角色的資料夾。<br>請到設定產生角色資料夾。</div>`; return;
+      box.innerHTML = `<div class="model-empty">${t("ui.noCharDir")}</div>`; return;
     }
     if (!data.models.length) {
-      box.innerHTML = `<div class="model-empty">此角色資料夾內沒有模型。<br>把每個模型各放進一個子資料夾即可顯示。</div>`; return;
+      box.innerHTML = `<div class="model-empty">${t("ui.noModels")}</div>`; return;
     }
     box.innerHTML = "";
     data.models.forEach((m) => box.appendChild(modelCard(gid, charName, m)));
@@ -409,7 +490,7 @@ async function openCharacterFolder(gid, character) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ character }),
     });
-    toast(`📂 已開啟資料夾：${data.path}`, "ok", 4000);
+    toast(t("ui.folderOpened", { path: data.path }), "ok", 4000);
   } catch (e) { toast(`❌ ${e.message}`, "err", 5000); }
 }
 
@@ -431,7 +512,7 @@ function modelCard(gid, character, model) {
   function render() {
     slot.innerHTML = "";
     if (!previews.length) {
-      slot.appendChild(el("div", "no-preview", "（無預覽）<br>按 ✏️ 編輯加入圖片 / GIF / 影片"));
+      slot.appendChild(el("div", "no-preview", t("ui.noPreview")));
       tag.textContent = ""; counter.textContent = ""; return;
     }
     const p = previews[idx];
@@ -453,25 +534,25 @@ function modelCard(gid, character, model) {
   }
   card.appendChild(preview);
 
-  // name (fixed 2-line height so all cards align)
+  // name (fixed 2-line height so all cards align) — model folder names stay as-is
   const nameRow = el("div", "m-name");
   nameRow.textContent = model.name;
   nameRow.title = model.name;
   card.appendChild(nameRow);
-  card.appendChild(el("div", "m-sub", `${previews.length} 個預覽`));
+  card.appendChild(el("div", "m-sub", t("ui.previewsCount", { n: previews.length })));
 
   // ---- 3 action buttons ----
   const actions = el("div", "model-actions");
 
   const tgl = el("button", `mbtn toggle ${model.enabled ? "on" : "off"}`,
-    model.enabled ? "⏻ 啟用中" : "⏻ 已停用");
-  tgl.title = model.enabled ? "點擊以停用" : "點擊以啟用（其餘自動停用）";
+    model.enabled ? `⏻ ${t("ui.active")}` : `⏻ ${t("ui.disabled")}`);
+  tgl.title = model.enabled ? t("ui.toggleDisableTip") : t("ui.toggleEnableTip");
   tgl.addEventListener("click", () => toggleModel(gid, character, model));
 
-  const keys = el("button", "mbtn keys", "⌨ 快捷鍵");
+  const keys = el("button", "mbtn keys", `⌨ ${t("ui.hotkeys")}`);
   keys.addEventListener("click", (e) => { e.stopPropagation(); showHotkeys(gid, character, model, keys); });
 
-  const edit = el("button", "mbtn edit", "✏️ 編輯");
+  const edit = el("button", "mbtn edit", `✏️ ${t("ui.edit")}`);
   edit.addEventListener("click", () => openEditModel(gid, character, model.folder));
 
   actions.appendChild(tgl); actions.appendChild(keys); actions.appendChild(edit);
@@ -487,16 +568,15 @@ async function toggleModel(gid, character, model) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ character, folder: model.folder, enable: !model.enabled }),
     });
-    toast(model.enabled ? "已停用此模型" : "✅ 已啟用（其餘模型自動停用）", "ok");
+    toast(model.enabled ? t("ui.modelDisabled") : t("ui.modelEnabled"), "ok");
     openCharacter(gid, character); // re-render with fresh states (no extra history)
   } catch (e) { toast(`❌ ${e.message}`, "err"); }
 }
 
 // ---------- hotkey floating popover ----------
-const HK_TYPE_LABEL = { cycle: "循環", toggle: "開關", hold: "按住", activate: "觸發" };
 function hotkeyStateLabel(h) {
-  if (h.states) return `${h.states} 段`;
-  if (h.type) return HK_TYPE_LABEL[h.type] || h.type;
+  if (h.states) return t("ui.statesUnit", { n: h.states });
+  if (h.type) return tHotkeyType(h.type);
   return "—";
 }
 let hotkeyPopover = null;
@@ -522,9 +602,9 @@ async function showHotkeys(gid, character, model, anchor) {
   closeHotkeyPopover();
   const pop = el("div", "hotkey-popover");
   pop.dataset.folder = model.folder;
-  pop.innerHTML = `<div class="hk-head">⌨ 快捷鍵 <span class="hk-ini"></span></div>
-    <div class="hk-cols"><span>項目</span><span>按鍵</span><span>段數</span></div>
-    <div class="hk-body">載入中…</div>`;
+  pop.innerHTML = `<div class="hk-head">⌨ ${t("ui.hotkeys")} <span class="hk-ini"></span></div>
+    <div class="hk-cols"><span>${t("ui.hkItem")}</span><span>${t("ui.hkKey")}</span><span>${t("ui.hkSteps")}</span></div>
+    <div class="hk-body">${t("ui.loading")}</div>`;
   document.body.appendChild(pop);
   hotkeyPopover = pop;
   positionPopover(pop, anchor);
@@ -533,7 +613,7 @@ async function showHotkeys(gid, character, model, anchor) {
     pop.querySelector(".hk-ini").textContent = data.ini ? `· ${data.ini}` : "";
     const body = pop.querySelector(".hk-body");
     if (!data.hotkeys.length) {
-      body.innerHTML = `<div class="hk-empty">此模型的 .ini 找不到可切換的快捷鍵</div>`;
+      body.innerHTML = `<div class="hk-empty">${t("ui.hkEmpty")}</div>`;
     } else {
       body.innerHTML = "";
       data.hotkeys.forEach((h) => {
@@ -567,19 +647,19 @@ async function openEditModel(gid, character, folder) {
 
   const g = gameById(gid);
   const modelName = folder.replace(/^DISABLED /, "");
-  setCrumb(`${(g && (g.name_zh || g.name)) || ""} · ${character} · 編輯`);
+  setCrumb(`${(g && gameLabel(g)) || ""} · ${tChar(character)} · ${t("ui.edit")}`);
 
   const c = $("#content");
   c.innerHTML = `
     <div class="char-detail-head">
-      <div class="cd-meta"><h2>編輯預覽</h2><div class="cd-sub">${modelName}</div></div>
+      <div class="cd-meta"><h2>${t("ui.editPreviews")}</h2><div class="cd-sub">${modelName}</div></div>
     </div>
     <div class="edit-toolbar">
-      <button class="btn btn-primary" id="uploadBtn">⬆️ 上傳圖片 / 影片</button>
+      <button class="btn btn-primary" id="uploadBtn">${t("ui.uploadBtn")}</button>
       <input type="file" id="fileInput" multiple accept="image/*,video/*" hidden>
-      <span class="edit-hint">或在此頁面直接按 <kbd>Ctrl</kbd>+<kbd>V</kbd> 貼上剪貼簿圖片 · 拖曳縮圖可調整順序（第一張為封面）</span>
+      <span class="edit-hint">${t("ui.editHint")}</span>
     </div>
-    <div class="edit-grid" id="editGrid"><div class="model-empty">載入中…</div></div>`;
+    <div class="edit-grid" id="editGrid"><div class="model-empty">${t("ui.loading")}</div></div>`;
 
   $("#uploadBtn").addEventListener("click", () => $("#fileInput").click());
   $("#fileInput").addEventListener("change", (e) => uploadFiles([...e.target.files]));
@@ -601,7 +681,7 @@ function renderEditPreviews(previews) {
   state.edit.previews = previews.slice();
   grid.innerHTML = "";
   if (!previews.length) {
-    grid.innerHTML = `<div class="model-empty">目前沒有預覽。<br>上傳或貼上圖片即可加入。</div>`;
+    grid.innerHTML = `<div class="model-empty">${t("ui.editEmpty")}</div>`;
     return;
   }
   previews.forEach((p, idx) => {
@@ -614,11 +694,11 @@ function renderEditPreviews(previews) {
       : `<img src="${src}" alt="${p.file}">`;
     item.innerHTML = `<div class="edit-thumb">${media}
         <span class="edit-kind">${p.kind}</span>
-        ${idx === 0 ? `<span class="edit-cover">封面</span>` : ""}
-        <span class="drag-handle" title="拖曳調整順序">⠿</span>
+        ${idx === 0 ? `<span class="edit-cover">${t("ui.cover")}</span>` : ""}
+        <span class="drag-handle" title="${t("ui.hkSteps")}">⠿</span>
       </div>
       <div class="edit-name" title="${p.file}">${p.file}</div>
-      <button class="edit-del" title="刪除">✕ 刪除</button>`;
+      <button class="edit-del">${t("ui.deleteBtn")}</button>`;
     item.querySelector(".edit-del").addEventListener("click", () => deletePreview(p.file));
 
     item.addEventListener("dragstart", (e) => {
@@ -663,7 +743,7 @@ async function persistOrder(order) {
       body: JSON.stringify({ character, folder, order }),
     });
     renderEditPreviews(data.previews);
-    toast("✅ 已更新預覽順序（第一張為封面）", "ok", 2000);
+    toast(t("ui.reorderOk"), "ok", 2000);
   } catch (e) { toast(`❌ ${e.message}`, "err"); }
 }
 
@@ -679,12 +759,12 @@ async function uploadFiles(files) {
       ? f.name : `pasted_${Date.now()}_${i}${extFromType(f.type)}`;
     fd.append("file", f, name);
   });
-  toast("上傳中…", "info", 0);
+  toast(t("ui.uploading"), "info", 0);
   try {
     const r = await fetch(`/api/games/${gid}/model/preview/upload`, { method: "POST", body: fd });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "上傳失敗");
-    toast(`✅ 已新增 ${data.saved.length} 個檔案`, "ok");
+    if (!r.ok) throw new Error(data.error || "upload failed");
+    toast(t("ui.uploadedN", { n: data.saved.length }), "ok");
     renderEditPreviews(data.previews);
   } catch (e) { toast(`❌ ${e.message}`, "err", 5000); }
 }
@@ -697,7 +777,7 @@ async function deletePreview(file) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ character, folder, file }),
     });
-    toast(`🗑️ 已刪除 ${file}`, "ok");
+    toast(t("ui.deletedFile", { file }), "ok");
     renderEditPreviews(data.previews);
   } catch (e) { toast(`❌ ${e.message}`, "err"); }
 }
@@ -713,14 +793,15 @@ function onPaste(e) {
 
 // ===================== SETTINGS view =====================
 const SETTINGS_CATS = [
-  { id: "library", label: "遊戲庫", sub: "Game Libraries", icon: "🎮" },
-  { id: "about", label: "關於", sub: "About", icon: "ℹ️" },
+  { id: "library", labelKey: "catLibrary", sub: "Game Libraries", icon: "🎮" },
+  { id: "language", labelKey: "catLanguage", sub: "Language", icon: "🌐" },
+  { id: "about", labelKey: "catAbout", sub: "About", icon: "ℹ️" },
 ];
 
 function showSettings() {
   pushRoute({ view: "settings", gameId: null });
   state.view = "settings";
-  setCrumb("設定");
+  setCrumb(t("ui.settingsTitle"));
   $("#filterbar").classList.add("hidden");
   highlightNav();
   if (!state.settingsCat) state.settingsCat = "library";
@@ -735,7 +816,7 @@ function showSettings() {
   SETTINGS_CATS.forEach((cat) => {
     const item = el("a", "settings-cat" + (cat.id === state.settingsCat ? " active" : ""));
     item.innerHTML = `<span class="sc-ico">${cat.icon}</span>
-      <span class="sc-text"><span class="sc-label">${cat.label}</span><span class="sc-sub">${cat.sub}</span></span>`;
+      <span class="sc-text"><span class="sc-label">${t("ui." + cat.labelKey)}</span><span class="sc-sub">${cat.sub}</span></span>`;
     item.addEventListener("click", () => {
       state.settingsCat = cat.id;
       $$("#settingsNav .settings-cat").forEach((x) => x.classList.remove("active"));
@@ -754,26 +835,36 @@ function renderSettingsPanel(catId) {
   panel.innerHTML = "";
 
   if (catId === "library") {
-    panel.appendChild(el("h2", "settings-title", "遊戲庫"));
-    panel.appendChild(el("p", "settings-desc", "勾選要啟用的遊戲，設定其 Mods 資料夾後保存，該遊戲就會出現在左側遊戲庫。"));
+    panel.appendChild(el("h2", "settings-title", t("ui.catLibrary")));
+    panel.appendChild(el("p", "settings-desc", t("ui.libraryDesc")));
     const rows = el("div");
     state.games.forEach((g) => rows.appendChild(gameRow(g)));
     panel.appendChild(rows);
+  } else if (catId === "language") {
+    panel.appendChild(el("h2", "settings-title", t("ui.languageTitle")));
+    panel.appendChild(el("p", "settings-desc", t("ui.languageDesc")));
+    const list = el("div", "lang-list");
+    state.locales.forEach((loc) => {
+      const opt = el("button", "lang-opt" + (loc.code === state.lang ? " active" : ""));
+      opt.innerHTML = `<span class="lang-name">${loc.name}</span><span class="lang-code">${loc.code}</span>
+        ${loc.code === state.lang ? `<span class="lang-check">✓</span>` : ""}`;
+      opt.addEventListener("click", () => { if (loc.code !== state.lang) changeLanguage(loc.code); });
+      list.appendChild(opt);
+    });
+    panel.appendChild(list);
   } else if (catId === "about") {
     const enabled = state.games.filter((g) => g.enabled);
-    panel.appendChild(el("h2", "settings-title", "關於 MODEX"));
+    const feats = tList("ui.aboutFeats").map((f) => `<span>${f}</span>`).join("");
+    panel.appendChild(el("h2", "settings-title", t("ui.aboutTitle")));
     panel.appendChild(el("div", "about-box", `
       <div class="about-brand"><span class="brand-dot"></span><b>MODEX</b> <span class="about-tag">Mod Index</span></div>
-      <p class="about-line">Emby 風格的多遊戲 Mod 管理庫，像「圖鑑」一樣瀏覽與整理角色模組。</p>
+      <p class="about-line">${t("ui.aboutDesc")}</p>
       <div class="about-grid">
-        <div><span class="about-k">支援遊戲</span><span class="about-v">${state.games.length}</span></div>
-        <div><span class="about-k">已啟用</span><span class="about-v">${enabled.length}</span></div>
-        <div><span class="about-k">前端 / 後端</span><span class="about-v">HTML · Python (Flask)</span></div>
+        <div><span class="about-k">${t("ui.aboutSupported")}</span><span class="about-v">${state.games.length}</span></div>
+        <div><span class="about-k">${t("ui.aboutEnabled")}</span><span class="about-v">${enabled.length}</span></div>
+        <div><span class="about-k">${t("ui.aboutStack")}</span><span class="about-v">HTML · Python (Flask)</span></div>
       </div>
-      <div class="about-feats">
-        <span>圖庫式瀏覽</span><span>稀有度/元素/地區檢索</span><span>啟用 ↔ 停用</span>
-        <span>快捷鍵檢視</span><span>預覽編輯・拖曳排序</span><span>開啟資料夾</span>
-      </div>`));
+      <div class="about-feats">${feats}</div>`));
   }
 }
 
@@ -783,20 +874,20 @@ function gameRow(g) {
     <div class="game-row-head">
       <div class="g-ico">${g.icon || "🎮"}</div>
       <div class="g-meta">
-        <div class="g-name">${g.name_zh || g.name} <span style="color:var(--muted);font-weight:400;font-size:13px;">${g.name}</span></div>
-        <div class="g-sub">來源：${g.source} · 已爬取 ${g.char_count} 位角色</div>
+        <div class="g-name">${gameLabel(g)} <span style="color:var(--muted);font-weight:400;font-size:13px;">${g.name}</span></div>
+        <div class="g-sub">${t("ui.sourceLine", { src: g.source, n: g.char_count })}</div>
       </div>
       <label class="switch"><input type="checkbox" ${g.enabled ? "checked" : ""}><span class="slider"></span></label>
     </div>
     <div class="game-row-body">
       <div class="field-row">
-        <label>Mods 資料夾</label>
-        <input type="text" class="g-folder" placeholder="例如 G:\\Game Mod\\GIMI\\Mods" value="${g.mods_folder || ""}">
+        <label>${t("ui.modsFolder")}</label>
+        <input type="text" class="g-folder" placeholder="G:\\Game Mod\\GIMI\\Mods" value="${g.mods_folder || ""}">
       </div>
       <div class="game-row-actions">
-        <button class="btn btn-primary g-save">保存</button>
-        <button class="btn g-refresh">更新角色資料</button>
-        <button class="btn g-gen">產生角色資料夾</button>
+        <button class="btn btn-primary g-save">${t("ui.save")}</button>
+        <button class="btn g-refresh">${t("ui.updateChars")}</button>
+        <button class="btn g-gen">${t("ui.genFolders")}</button>
         <span class="g-status"></span>
       </div>
     </div>`;
@@ -806,8 +897,8 @@ function gameRow(g) {
   const status = row.querySelector(".g-status");
   const setStatus = (msg, cls = "") => { status.textContent = msg; status.className = `g-status ${cls}`; };
 
-  if (g.mods_folder && !g.mods_exists) setStatus("⚠️ 資料夾不存在", "warn");
-  else if (g.enabled) setStatus("✓ 已啟用", "ok");
+  if (g.mods_folder && !g.mods_exists) setStatus(t("ui.statusFolderMissing"), "warn");
+  else if (g.enabled) setStatus(t("ui.statusEnabled"), "ok");
 
   row.querySelector(".g-save").addEventListener("click", async () => {
     try {
@@ -818,28 +909,28 @@ function gameRow(g) {
       Object.assign(g, data.game);
       await loadGames();                 // refresh sidebar
       if (data.game.enabled && data.game.mods_folder && !data.game.mods_exists)
-        setStatus("已保存，但資料夾不存在", "warn");
-      else setStatus("✅ 已保存", "ok");
-      toast("✅ 設定已保存", "ok");
+        setStatus(t("ui.statusSavedMissing"), "warn");
+      else setStatus(t("ui.statusSaved"), "ok");
+      toast(t("ui.savedOk"), "ok");
     } catch (e) { setStatus(`❌ ${e.message}`, "warn"); }
   });
 
   row.querySelector(".g-refresh").addEventListener("click", async (ev) => {
-    const b = ev.target; b.classList.add("spinning"); b.disabled = true; setStatus("爬取中…");
+    const b = ev.target; b.classList.add("spinning"); b.disabled = true; setStatus(t("ui.scraping"));
     try {
       const data = await api(`/api/games/${g.id}/refresh`, { method: "POST" });
       Object.assign(g, data.game); await loadGames();
-      setStatus(`✅ 已更新 ${data.count} 位角色`, "ok");
-      row.querySelector(".g-sub").textContent = `來源：${g.source} · 已爬取 ${data.count} 位角色`;
+      setStatus(t("ui.updatedChars", { n: data.count }), "ok");
+      row.querySelector(".g-sub").textContent = t("ui.sourceLine", { src: g.source, n: data.count });
     } catch (e) { setStatus(`❌ ${e.message}`, "warn"); }
     finally { b.classList.remove("spinning"); b.disabled = false; }
   });
 
   row.querySelector(".g-gen").addEventListener("click", async (ev) => {
-    const b = ev.target; b.disabled = true; setStatus("建立資料夾中…");
+    const b = ev.target; b.disabled = true; setStatus(t("ui.buildingFolders"));
     try {
       const data = await api(`/api/games/${g.id}/generate-folders`, { method: "POST" });
-      setStatus(`📁 已建立 ${data.created_count} 個（略過 ${data.skipped_count} 個）`, "ok");
+      setStatus(t("ui.generated", { created: data.created_count, skipped: data.skipped_count }), "ok");
     } catch (e) { setStatus(`❌ ${e.message}`, "warn"); }
     finally { b.disabled = false; }
   });

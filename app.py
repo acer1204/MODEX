@@ -27,7 +27,9 @@ import scraper
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")
 ICON_ROOT = os.path.join(HERE, "static", "icons")
+LOCALES_DIR = os.path.join(HERE, "locales")
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+DEFAULT_LANG = "en"
 
 PREVIEW_EXT = {
     "image": {".png", ".jpg", ".jpeg", ".webp", ".bmp"},
@@ -82,7 +84,22 @@ def save_json(path, data):
 def get_config():
     cfg = load_json(CONFIG_FILE, {})
     cfg.setdefault("games", {})
+    cfg.setdefault("language", DEFAULT_LANG)
     return cfg
+
+
+def available_locales():
+    """Scan the locales/ folder and return [{code, name}]."""
+    out = []
+    if os.path.isdir(LOCALES_DIR):
+        for f in sorted(os.listdir(LOCALES_DIR)):
+            if f.endswith(".json"):
+                data = load_json(os.path.join(LOCALES_DIR, f), {})
+                code = data.get("code") or os.path.splitext(f)[0]
+                out.append({"code": code, "name": data.get("name", code)})
+    # keep English first
+    out.sort(key=lambda x: (x["code"] != "en", x["code"]))
+    return out
 
 
 def game_cfg(cfg, gid):
@@ -330,6 +347,27 @@ def unique_name(folder: str, filename: str) -> str:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+# --------------------------------------------------------------------------- #
+#  app-level config (language) + locale files
+# --------------------------------------------------------------------------- #
+@app.route("/api/app", methods=["GET", "POST"])
+def api_app():
+    cfg = get_config()
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=True) or {}
+        if "language" in data:
+            lang = str(data["language"])
+            codes = [l["code"] for l in available_locales()]
+            cfg["language"] = lang if lang in codes else DEFAULT_LANG
+            save_json(CONFIG_FILE, cfg)
+    return jsonify({"language": cfg.get("language", DEFAULT_LANG), "locales": available_locales()})
+
+
+@app.route("/locales/<path:filename>")
+def locales(filename):
+    return send_from_directory(LOCALES_DIR, filename)
 
 
 # --------------------------------------------------------------------------- #
