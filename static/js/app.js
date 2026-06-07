@@ -4,6 +4,9 @@ const ELEMENT_COLORS = {
   Pyro: "var(--Pyro)", Hydro: "var(--Hydro)", Cryo: "var(--Cryo)",
   Electro: "var(--Electro)", Anemo: "var(--Anemo)", Geo: "var(--Geo)",
   Dendro: "var(--Dendro)", None: "var(--None)",
+  // HSR Combat Types (names don't collide with Genshin elements)
+  Physical: "#cdd3e0", Fire: "#ff7a59", Ice: "#7fe7ff", Lightning: "#c89bff",
+  Wind: "#6fe7b7", Quantum: "#8a7be0", Imaginary: "#ffe066",
 };
 // ZZZ attribute colors
 const ATTR_COLORS = {

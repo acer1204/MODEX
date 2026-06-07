@@ -95,7 +95,9 @@
     "region": "Region",
     "rank": "Rank",
     "attribute": "Attribute",
-    "faction": "Faction"
+    "faction": "Faction",
+    "rarity": "Rarity",
+    "path": "Path"
   },
   "hotkeyTypes": {
     "cycle": "Cycle",
@@ -111,7 +113,14 @@
     "Anemo": "Anemo",
     "Geo": "Geo",
     "Dendro": "Dendro",
-    "None": "None"
+    "None": "None",
+    "Physical": "Physical",
+    "Fire": "Fire",
+    "Ice": "Ice",
+    "Lightning": "Lightning",
+    "Wind": "Wind",
+    "Quantum": "Quantum",
+    "Imaginary": "Imaginary"
   },
   "regions": {
     "Mondstadt": "Mondstadt",
@@ -151,6 +160,18 @@
     "Stars of Lyra": "Stars of Lyra",
     "Victoria Housekeeping Co.": "Victoria Housekeeping Co.",
     "Yunkui Summit": "Yunkui Summit",
+    "None": "None"
+  },
+  "paths": {
+    "Destruction": "Destruction",
+    "The Hunt": "The Hunt",
+    "Erudition": "Erudition",
+    "Harmony": "Harmony",
+    "Nihility": "Nihility",
+    "Preservation": "Preservation",
+    "Abundance": "Abundance",
+    "Remembrance": "Remembrance",
+    "Elation": "Elation",
     "None": "None"
   },
   "characters": {
@@ -317,6 +338,10 @@
     "Tanuki in Broad Daylight": "Tanuki in Broad Daylight",
     "Touch of Dawnlight": "Touch of Dawnlight",
     "Trails of Ink": "Trails of Ink",
-    "White Heart Silhouette": "White Heart Silhouette"
+    "White Heart Silhouette": "White Heart Silhouette",
+    "Nascent Spring": "Nascent Spring",
+    "Spring Missive": "Spring Missive",
+    "Plumblossom Letter": "Plumblossom Letter",
+    "Gossamer Flutter": "Gossamer Flutter"
   }
 }

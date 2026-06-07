@@ -476,6 +476,170 @@ def scrape_zzz_outfits(image_dir, characters=None, progress=None):
     return result
 
 
+# =========================================================================== #
+#  Honkai: Star Rail (HSR) — characters + outfits
+# =========================================================================== #
+HSR_API = "https://honkai-star-rail.fandom.com/api.php"
+
+
+def _hsr_parse(page, prop="text"):
+    params = {"action": "parse", "page": page, "prop": prop,
+              "format": "json", "formatversion": "2", "redirects": "1"}
+    r = requests.get(HSR_API, params=params, headers=HEADERS, timeout=60)
+    r.raise_for_status()
+    return r.json().get("parse", {}).get(prop)
+
+
+def _hsr_file_url(filename, width=256):
+    try:
+        params = {"action": "query", "titles": "File:" + filename, "prop": "imageinfo",
+                  "iiprop": "url", "iiurlwidth": width, "format": "json", "formatversion": "2"}
+        pages = requests.get(HSR_API, params=params, headers=HEADERS, timeout=60).json().get("query", {}).get("pages", [])
+        if pages and "imageinfo" in pages[0]:
+            info = pages[0]["imageinfo"][0]
+            return info.get("thumburl") or info.get("url")
+    except Exception:
+        pass
+    return None
+
+
+def parse_hsr_characters(html):
+    soup = BeautifulSoup(html, "lxml")
+    table = None
+    for tbl in soup.find_all("table"):
+        rows = tbl.find_all("tr")
+        if len(rows) > 10:
+            hdr = [th.get_text(strip=True) for th in rows[0].find_all(["th", "td"])]
+            if "Character" in hdr and "Rarity" in hdr and "Path" in hdr:
+                table = tbl
+                break
+    chars = []
+    if table:
+        for r in table.find_all("tr")[1:]:
+            c = r.find_all(["td", "th"], recursive=False)
+            if len(c) < 4:
+                continue
+            name = c[0].get_text(strip=True)
+            if not name:
+                continue
+            rimg = c[1].find("img")
+            m = re.search(r"\d", rimg.get("alt", "") if rimg else "")
+            chars.append({
+                "name": name,
+                "icon_url": _clean_icon_url(_img_src(c[0].find("img"))),
+                "rarity": m.group() if m else "",
+                "path": c[2].get_text(strip=True),
+                "element": c[3].get_text(strip=True),
+            })
+    # Disambiguate shared names (March 7th, Trailblazer) by Path so each variant
+    # gets a unique English folder name that matches the wiki's outfit/splash naming
+    # e.g. "March 7th" -> "March 7th (Preservation)".
+    counts = {}
+    for c in chars:
+        counts[c["name"]] = counts.get(c["name"], 0) + 1
+    for c in chars:
+        if counts[c["name"]] > 1 and c["path"]:
+            c["name"] = f"{c['name']} ({c['path']})"
+    return chars
+
+
+def scrape_hsr(icon_dir, progress=None):
+    """Scrape HSR Playable Characters -> [{name, icon, rarity, path, element}]."""
+    def log(msg):
+        if progress:
+            progress(msg)
+
+    log("Fetching HSR characters from Fandom API ...")
+    chars = parse_hsr_characters(_hsr_parse("Character/List"))
+    log(f"Parsed {len(chars)} characters. Downloading icons ...")
+
+    os.makedirs(icon_dir, exist_ok=True)
+    ok = 0
+    for i, a in enumerate(chars, 1):
+        fname = safe_filename(a["name"]) + ".png"
+        dest = os.path.join(icon_dir, fname)
+        url = a["icon_url"] or _hsr_file_url(f"Character {a['name']} Icon.png")
+        if not _icon_ok(dest):
+            download_icon(url, dest)
+        a["icon"] = fname if _icon_ok(dest) else None
+        a["icon_url"] = url
+        if a["icon"]:
+            ok += 1
+        if i % 15 == 0:
+            log(f"  icons {i}/{len(chars)}")
+    log(f"Done. {ok}/{len(chars)} HSR icons cached.")
+    return chars
+
+
+def parse_hsr_outfits(html):
+    """Alternate outfits from the Outfits page -> [{name, character}]."""
+    soup = BeautifulSoup(html, "lxml")
+    seen, outfits = set(), []
+    for tbl in soup.find_all("table"):
+        rows = tbl.find_all("tr")
+        if not rows:
+            continue
+        hdr = [th.get_text(strip=True) for th in rows[0].find_all(["th", "td"])]
+        if hdr[:5] != ["Icon", "Name", "Rarity", "Character", "Type"]:
+            continue
+        for r in rows[1:]:
+            c = r.find_all(["td", "th"], recursive=False)
+            if len(c) < 5:
+                continue
+            name, char, typ = c[1].get_text(strip=True), c[3].get_text(strip=True), c[4].get_text(strip=True)
+            if typ.strip().lower() != "alternate":
+                continue
+            key = (char, name)
+            if name and char and key not in seen:
+                seen.add(key)
+                outfits.append({"name": name, "character": char})
+    return outfits
+
+
+def scrape_hsr_outfits(image_dir, characters=None, progress=None):
+    """HSR outfits using each character/outfit Splash Art as the wish art.
+    Every character gets an Official entry; characters with alternate outfits get skins."""
+    def log(msg):
+        if progress:
+            progress(msg)
+
+    log("Fetching HSR alternate outfits ...")
+    skins = parse_hsr_outfits(_hsr_parse("Outfits"))
+    os.makedirs(image_dir, exist_ok=True)
+
+    result = {}
+    log(f"Downloading {len(skins)} skin splash arts ...")
+    for o in skins:
+        url = _hsr_file_url(f"Character {o['character']} {o['name']} Splash Art.png", 512)
+        fname = safe_filename(o["character"] + " - " + o["name"]) + ".png"
+        dest = os.path.join(image_dir, fname)
+        if url and not _icon_ok(dest):
+            download_icon(url, dest)
+        result.setdefault(o["character"], []).append({
+            "name": o["name"], "folder": safe_filename(o["name"]), "type": "Alternate",
+            "image": fname if _icon_ok(dest) else None, "image_url": url,
+        })
+
+    all_chars = list(dict.fromkeys((characters or []) + list(result.keys())))
+    log(f"Downloading official splash arts for {len(all_chars)} characters ...")
+    for i, ch in enumerate(all_chars, 1):
+        url = _hsr_file_url(f"Character {ch} Splash Art.png", 512)
+        fname = safe_filename(ch + " - Official") + ".png"
+        dest = os.path.join(image_dir, fname)
+        if url and not _icon_ok(dest):
+            download_icon(url, dest)
+        result.setdefault(ch, []).insert(0, {
+            "name": "Official", "folder": "Official", "type": "Default",
+            "image": fname if _icon_ok(dest) else None, "image_url": url,
+        })
+        if i % 20 == 0:
+            log(f"  official {i}/{len(all_chars)}")
+
+    skinned = sum(1 for v in result.values() if len(v) > 1)
+    log(f"Done. {len(result)} characters ({skinned} with alternate outfits).")
+    return result
+
+
 if __name__ == "__main__":
     # quick manual test
     here = os.path.dirname(os.path.abspath(__file__))

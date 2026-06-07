@@ -95,7 +95,9 @@
     "region": "地區",
     "rank": "等級",
     "attribute": "屬性",
-    "faction": "陣營"
+    "faction": "陣營",
+    "rarity": "稀有度",
+    "path": "命途"
   },
   "hotkeyTypes": {
     "cycle": "循環",
@@ -111,7 +113,14 @@
     "Anemo": "風",
     "Geo": "岩",
     "Dendro": "草",
-    "None": "無"
+    "None": "無",
+    "Physical": "物理",
+    "Fire": "火",
+    "Ice": "冰",
+    "Lightning": "雷",
+    "Wind": "風",
+    "Quantum": "量子",
+    "Imaginary": "虛數"
   },
   "regions": {
     "Mondstadt": "蒙德",
@@ -151,6 +160,18 @@
     "Stars of Lyra": "天琴座之星",
     "Victoria Housekeeping Co.": "維多利亞家政",
     "Yunkui Summit": "雲岿山",
+    "None": "無"
+  },
+  "paths": {
+    "Destruction": "毀滅",
+    "The Hunt": "巡獵",
+    "Erudition": "智識",
+    "Harmony": "同諧",
+    "Nihility": "虛無",
+    "Preservation": "存護",
+    "Abundance": "豐饒",
+    "Remembrance": "記憶",
+    "Elation": "歡愉",
     "None": "無"
   },
   "characters": {
@@ -317,6 +338,10 @@
     "Tanuki in Broad Daylight": "白晝狸貓",
     "Touch of Dawnlight": "拂曉微光",
     "Trails of Ink": "墨痕",
-    "White Heart Silhouette": "純白剪影"
+    "White Heart Silhouette": "純白剪影",
+    "Nascent Spring": "初萌之春",
+    "Spring Missive": "春日尺素",
+    "Plumblossom Letter": "梅花箋",
+    "Gossamer Flutter": "游絲輕舞"
   }
 }

@@ -73,6 +73,20 @@ SUPPORTED_GAMES = {
         "scraper": scraper.scrape_zzz,
         "outfit_scraper": scraper.scrape_zzz_outfits,
     },
+    "hsr": {
+        "id": "hsr",
+        "name": "Honkai: Star Rail",
+        "name_zh": "崩壞:星穹鐵道",
+        "icon": "🚂",
+        "source": "Fandom Wiki",
+        "facets": [
+            {"key": "rarity", "label": "Rarity", "kind": "stars", "badge": True},
+            {"key": "element", "label": "Element", "kind": "tag"},
+            {"key": "path", "label": "Path", "kind": "tag"},
+        ],
+        "scraper": scraper.scrape_hsr,
+        "outfit_scraper": scraper.scrape_hsr_outfits,
+    },
 }
 
 app = Flask(__name__)
