@@ -536,16 +536,39 @@ def api_game_generate(gid):
                 skipped += 1
 
     for ch in chars:
-        char_dir = os.path.join(folder, scraper.safe_filename(ch["name"]))
+        name = ch["name"]
+        char_dir = os.path.join(folder, scraper.safe_filename(name))
         make(char_dir)
-        # for characters with alternate outfits, also create each outfit
-        # subfolder (Official + each skin) so mods can be dropped straight in.
-        outfits = all_outfits.get(ch["name"], [])
-        if len(outfits) > 1:
-            for o in outfits:
-                make(os.path.join(char_dir, scraper.safe_filename(o.get("folder", ""))))
+        outfits = all_outfits.get(name, [])
+        skin_folders = _skin_folders(gid, name)
+        # Option B layout: every character gets an Official/ subfolder, plus a
+        # subfolder per alternate skin — so mods can be dropped straight in.
+        # Skip creating Official/ only when the char root already holds loose
+        # (old-style) model folders, since an empty Official/ would hide them.
+        if not _has_loose_models(char_dir, skin_folders):
+            make(os.path.join(char_dir, OFFICIAL))
+        for o in outfits:
+            fol = scraper.safe_filename(o.get("folder", ""))
+            if fol and fol != OFFICIAL:
+                make(os.path.join(char_dir, fol))
 
     return jsonify({"ok": True, "created_count": created, "skipped_count": skipped})
+
+
+def _has_loose_models(char_dir, skin_folders):
+    """True if char_dir directly holds old-style model folders (not Official/
+    and not a known skin folder). Used to avoid shadowing them with an empty
+    Official/ subfolder."""
+    if not os.path.isdir(char_dir):
+        return False
+    reserved = {str(s).lower() for s in skin_folders} | {OFFICIAL.lower()}
+    for e in os.listdir(char_dir):
+        if not os.path.isdir(os.path.join(char_dir, e)):
+            continue
+        base = e[len(DISABLED_PREFIX):] if e.startswith(DISABLED_PREFIX) else e
+        if base.lower() not in reserved:
+            return True
+    return False
 
 
 def _mods_folder(gid):
