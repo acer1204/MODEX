@@ -1013,7 +1013,8 @@ function gameRow(g) {
     const b = ev.target; b.disabled = true; setStatus(t("ui.buildingFolders"));
     try {
       const data = await api(`/api/games/${g.id}/generate-folders`, { method: "POST" });
-      setStatus(t("ui.generated", { created: data.created_count, skipped: data.skipped_count }), "ok");
+      setStatus(t("ui.generated", { created: data.created_count, skipped: data.skipped_count, moved: data.moved_count || 0 }), "ok");
+      if (data.conflicts && data.conflicts.length) console.warn("generate-folders name conflicts (left in place):", data.conflicts);
     } catch (e) { setStatus(`❌ ${e.message}`, "warn"); }
     finally { b.disabled = false; }
   });

@@ -80,7 +80,7 @@
     "updateFailed": "❌ Update failed: {msg}",
     "savedOk": "✅ Settings saved",
     "needRefreshFirst": "Please update character data first",
-    "generated": "📁 Created {created} folders ({skipped} skipped)",
+    "generated": "📁 Created {created} folders ({skipped} skipped · {moved} moved into Official)",
     "modelEnabled": "✅ Enabled (other models auto-disabled)",
     "modelDisabled": "Model disabled",
     "uploading": "Uploading…",

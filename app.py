@@ -11,6 +11,7 @@ Run:  python app.py   ->  http://127.0.0.1:8811
 import os
 import json
 import mimetypes
+import shutil
 
 from flask import (
     Flask,
@@ -535,40 +536,44 @@ def api_game_generate(gid):
             except Exception:
                 skipped += 1
 
+    moved = 0
+    conflicts = []
     for ch in chars:
         name = ch["name"]
         char_dir = os.path.join(folder, scraper.safe_filename(name))
         make(char_dir)
-        outfits = all_outfits.get(name, [])
-        skin_folders = _skin_folders(gid, name)
-        # Option B layout: every character gets an Official/ subfolder, plus a
-        # subfolder per alternate skin — so mods can be dropped straight in.
-        # Skip creating Official/ only when the char root already holds loose
-        # (old-style) model folders, since an empty Official/ would hide them.
-        if not _has_loose_models(char_dir, skin_folders):
-            make(os.path.join(char_dir, OFFICIAL))
-        for o in outfits:
+        # Uniform Option B layout: every character gets an Official/ subfolder,
+        # plus a subfolder per alternate skin.
+        reserved = {str(s).lower() for s in _skin_folders(gid, name)} | {OFFICIAL.lower()}
+        official_dir = os.path.join(char_dir, OFFICIAL)
+        make(official_dir)
+        # Unify existing libraries: move any old-style model folders sitting
+        # directly under the character folder into Official/ (skin subfolders
+        # are left untouched; DISABLED prefix is preserved). Same-name targets
+        # are left in place rather than overwritten.
+        for e in list(os.listdir(char_dir)):
+            src = os.path.join(char_dir, e)
+            if not os.path.isdir(src):
+                continue
+            base = e[len(DISABLED_PREFIX):] if e.startswith(DISABLED_PREFIX) else e
+            if base.lower() in reserved:
+                continue
+            dst = os.path.join(official_dir, e)
+            if os.path.exists(dst):
+                conflicts.append(f"{name}/{e}")
+                continue
+            try:
+                shutil.move(src, dst)
+                moved += 1
+            except Exception:
+                conflicts.append(f"{name}/{e}")
+        for o in all_outfits.get(name, []):
             fol = scraper.safe_filename(o.get("folder", ""))
             if fol and fol != OFFICIAL:
                 make(os.path.join(char_dir, fol))
 
-    return jsonify({"ok": True, "created_count": created, "skipped_count": skipped})
-
-
-def _has_loose_models(char_dir, skin_folders):
-    """True if char_dir directly holds old-style model folders (not Official/
-    and not a known skin folder). Used to avoid shadowing them with an empty
-    Official/ subfolder."""
-    if not os.path.isdir(char_dir):
-        return False
-    reserved = {str(s).lower() for s in skin_folders} | {OFFICIAL.lower()}
-    for e in os.listdir(char_dir):
-        if not os.path.isdir(os.path.join(char_dir, e)):
-            continue
-        base = e[len(DISABLED_PREFIX):] if e.startswith(DISABLED_PREFIX) else e
-        if base.lower() not in reserved:
-            return True
-    return False
+    return jsonify({"ok": True, "created_count": created, "skipped_count": skipped,
+                    "moved_count": moved, "conflicts": conflicts})
 
 
 def _mods_folder(gid):

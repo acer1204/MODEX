@@ -80,7 +80,7 @@
     "updateFailed": "❌ 更新失败：{msg}",
     "savedOk": "✅ 设定已保存",
     "needRefreshFirst": "请先按「更新角色资料」",
-    "generated": "📁 已建立 {created} 个资料夹（略过 {skipped} 个）",
+    "generated": "📁 已建立 {created} 个资料夹（略过 {skipped} 个 · 移入 Official {moved} 个）",
     "modelEnabled": "✅ 已启用（其余模型自动停用）",
     "modelDisabled": "已停用此模型",
     "uploading": "上传中…",
