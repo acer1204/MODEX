@@ -12,6 +12,7 @@ Emby 風格、瀏覽器操作的**遊戲角色 Mod 管理器**（對應 3DMigoto
 | :--- | :--- | :--- |
 | ⚔️ **Genshin Impact** / 原神 | Quality · Element · Region / 稀有度 · 元素 · 地區 | Fandom Wiki |
 | 🌀 **Zenless Zone Zero** / 絕區零 | Rank · Attribute · Faction / 等級 · 屬性 · 陣營 | Fandom Wiki |
+| 🚂 **Honkai: Star Rail** / 崩壞:星穹鐵道 | Rarity · Element · Path / 稀有度 · 元素 · 命途 | Fandom Wiki |
 
 More games can be added by registering a scraper and its filter facets in `SUPPORTED_GAMES` (`app.py`).<br>
 要新增其他遊戲，只要在 `app.py` 的 `SUPPORTED_GAMES` 註冊一個 scraper 與其篩選欄位即可。
@@ -34,15 +35,19 @@ More games can be added by registering a scraper and its filter facets in `SUPPO
 | :---: |
 | ![ZZZ Library](docs/06-library-zzz.png) |
 
+| Honkai: Star Rail — third game library (Rarity / Element / Path) / 崩壞:星穹鐵道・第三個遊戲庫（稀有度／元素／命途） |
+| :---: |
+| ![HSR Library](docs/07-library-hsr.png) |
+
 Demo data uses official character art for previews.<br>
 示意畫面以官方角色立繪作為預覽。
 
 ## Features / 功能
 
-- **Library view** — characters as poster cards (icon + name), scraped from the Genshin Impact and Zenless Zone Zero Fandom wikis.<br>
-  **圖庫瀏覽** — 角色以海報卡片（頭像 + 名稱）呈現，資料爬自 原神 與 絕區零 的 Fandom wiki。
-- **Filtering** — per-game quick filters plus name search: Quality / Element / Region for Genshin, Rank / Attribute / Faction for Zenless Zone Zero.<br>
-  **檢索** — 各遊戲專屬的快速篩選並可用名稱搜尋：原神為 稀有度 / 元素 / 地區，絕區零為 等級 / 屬性 / 陣營。
+- **Library view** — characters as poster cards (icon + name), scraped from the Genshin Impact, Zenless Zone Zero and Honkai: Star Rail Fandom wikis.<br>
+  **圖庫瀏覽** — 角色以海報卡片（頭像 + 名稱）呈現，資料爬自 原神、絕區零 與 崩壞:星穹鐵道 的 Fandom wiki。
+- **Filtering** — per-game quick filters plus name search: Quality / Element / Region for Genshin, Rank / Attribute / Faction for Zenless Zone Zero, Rarity / Element / Path for Honkai: Star Rail.<br>
+  **檢索** — 各遊戲專屬的快速篩選並可用名稱搜尋：原神為 稀有度 / 元素 / 地區，絕區零為 等級 / 屬性 / 陣營，崩壞:星穹鐵道為 稀有度 / 元素 / 命途。
 - **Enable / Disable** a model — single active model per character; the rest are auto-disabled via the `DISABLED ` folder prefix.<br>
   **啟用 / 停用**模型 — 同一角色只會有一個生效，其餘自動以 `DISABLED ` 前綴停用。
 - **Hotkeys** — reads the mod's `.ini` and lists every `[Key…]` binding (key + type + number of states) in a popover.<br>
@@ -53,12 +58,12 @@ Demo data uses official character art for previews.<br>
   **開啟資料夾** — 點角色頭像即以系統檔案總管開啟目前外觀對應的 mod 資料夾。
 - **Outfits / skins** — characters with alternate outfits get an outfit switcher (with the official wish art); switch between Official and each skin to manage its own mods. Layout: `<Character>/Official/<models>` and `<Character>/<SkinName>/<models>`.<br>
   **外觀 / 限定 skin** — 有限定外觀的角色會出現外觀切換器（附官方 wish 立繪），可在「官方」與各 skin 間切換、各自管理 mod。結構：`<角色>/Official/<模型>` 與 `<角色>/<SkinName>/<模型>`。
-- **Multi-game ready** — games are registered in `SUPPORTED_GAMES` in `app.py`; currently ships with Genshin Impact and Zenless Zone Zero, each with its own scraper and filter facets.<br>
-  **多遊戲架構** — 遊戲註冊在 `app.py` 的 `SUPPORTED_GAMES`，目前內建原神（Genshin Impact）與絕區零（Zenless Zone Zero），各自擁有專屬的 scraper 與篩選欄位。
+- **Multi-game ready** — games are registered in `SUPPORTED_GAMES` in `app.py`; currently ships with Genshin Impact, Zenless Zone Zero and Honkai: Star Rail, each with its own scraper and filter facets.<br>
+  **多遊戲架構** — 遊戲註冊在 `app.py` 的 `SUPPORTED_GAMES`，目前內建原神（Genshin Impact）、絕區零（Zenless Zone Zero）與崩壞:星穹鐵道（Honkai: Star Rail），各自擁有專屬的 scraper 與篩選欄位。
 - **Offline-friendly** — character icons are downloaded locally on refresh, so browsing works without a connection.<br>
   **離線可用** — 角色頭像在更新時下載到本機，之後離線也能瀏覽。
-- **Multi-language** — English / Traditional Chinese / Simplified Chinese (default English). Character, element, region, attribute, faction and outfit/skin names are translated; folder names always stay English. Translations live in editable files under `locales/`.<br>
-  **多國語言** — 英文 / 繁體中文 / 簡體中文（預設英文）。角色、元素、地區、屬性、陣營、外觀／skin 名稱皆會翻譯；資料夾名稱一律維持英文。翻譯放在 `locales/` 內，可自行編輯調整。
+- **Multi-language** — English / Traditional Chinese / Simplified Chinese (default English). Character, element, region, attribute, faction, path and outfit/skin names are translated; folder names always stay English. Translations live in editable files under `locales/`.<br>
+  **多國語言** — 英文 / 繁體中文 / 簡體中文（預設英文）。角色、元素、地區、屬性、陣營、命途、外觀／skin 名稱皆會翻譯；資料夾名稱一律維持英文。翻譯放在 `locales/` 內，可自行編輯調整。
 
 ## Requirements / 環境需求
 
