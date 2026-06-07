@@ -381,8 +381,9 @@ body {
   overflow: hidden; min-height: calc(1.3em * 2 + 14px);
 }
 .model-card .m-sub { padding: 0 12px 10px; font-size: 11px; color: var(--muted); }
-.model-card.disabled .preview { opacity: .55; }
-.model-card.enabled { border-color: #2f7a4d; }
+/* Keep all preview images at full brightness; show active state via the
+   enabled card's green border + glow instead of dimming the preview. */
+.model-card.enabled { border-color: #2f7a4d; box-shadow: 0 0 0 1px #2f7a4d, 0 0 14px rgba(47,122,77,.35); }
 
 /* ---- 3 action buttons ---- */
 .model-actions { display: flex; gap: 6px; padding: 0 10px 12px; }
