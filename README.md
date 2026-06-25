@@ -80,6 +80,12 @@ pip install -r requirements.txt
 
 ## Run / 執行
 
+**Windows — one click:** double-click **`start.bat`**. It installs dependencies on first run, starts the server, and opens the web UI in your browser automatically.<br>
+**Windows 一鍵啟動：** 直接雙擊 **`start.bat`**。首次執行會自動安裝相依套件、啟動伺服器，並自動在瀏覽器開啟網頁介面。
+
+Or run it manually:<br>
+或手動執行：
+
 ```bash
 python app.py
 ```
