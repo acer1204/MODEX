@@ -142,6 +142,8 @@
     "Physical": "Physical",
     "Auric Ink": "Auric Ink",
     "Honed Edge": "Honed Edge",
+    "Wind": "Wind",
+    "Lumiflux": "Lumiflux",
     "None": "None"
   },
   "factions": {
@@ -160,6 +162,11 @@
     "Stars of Lyra": "Stars of Lyra",
     "Victoria Housekeeping Co.": "Victoria Housekeeping Co.",
     "Yunkui Summit": "Yunkui Summit",
+    "Airspace Patrol Department": "Airspace Patrol Department",
+    "Covenant of Dayat": "Covenant of Dayat",
+    "External Strategy Department": "External Strategy Department",
+    "Flint Workshop": "Flint Workshop",
+    "Phaethon": "Phaethon",
     "None": "None"
   },
   "paths": {
@@ -505,6 +512,16 @@
     "Nascent Spring": "Nascent Spring",
     "Spring Missive": "Spring Missive",
     "Plumblossom Letter": "Plumblossom Letter",
-    "Gossamer Flutter": "Gossamer Flutter"
+    "Gossamer Flutter": "Gossamer Flutter",
+    "Brilliance of Stars": "Brilliance of Stars",
+    "Cuteness Loading": "Cuteness Loading",
+    "Delusions in Business": "Delusions in Business",
+    "Heartfelt Support": "Heartfelt Support",
+    "Majestic Wavechaser": "Majestic Wavechaser",
+    "Moonlight Whispers": "Moonlight Whispers",
+    "Oath of Skies": "Oath of Skies",
+    "Princess on Holiday": "Princess on Holiday",
+    "Seashade Pas Seul": "Seashade Pas Seul",
+    "Shade of Leisure": "Shade of Leisure"
   }
 }

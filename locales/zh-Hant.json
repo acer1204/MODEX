@@ -142,6 +142,8 @@
     "Physical": "物理",
     "Auric Ink": "玄墨",
     "Honed Edge": "磨鋒",
+    "Wind": "風",
+    "Lumiflux": "流明",
     "None": "無"
   },
   "factions": {
@@ -160,6 +162,11 @@
     "Stars of Lyra": "天琴座之星",
     "Victoria Housekeeping Co.": "維多利亞家政",
     "Yunkui Summit": "雲巋山",
+    "Airspace Patrol Department": "空域巡戍局",
+    "Covenant of Dayat": "達識結社",
+    "External Strategy Department": "外務籌策局",
+    "Flint Workshop": "弗林特工坊",
+    "Phaethon": "「法厄同」",
     "None": "無"
   },
   "paths": {
@@ -505,6 +512,16 @@
     "Nascent Spring": "初萌之春",
     "Spring Missive": "春日尺素",
     "Plumblossom Letter": "梅花箋",
-    "Gossamer Flutter": "游絲輕舞"
+    "Gossamer Flutter": "游絲輕舞",
+    "Brilliance of Stars": "極星澄明",
+    "Cuteness Loading": "萌力載入中",
+    "Delusions in Business": "夢想營業中",
+    "Heartfelt Support": "心動應援中",
+    "Majestic Wavechaser": "驚鴻逐浪",
+    "Moonlight Whispers": "月夜密語",
+    "Oath of Skies": "蒼穹執誓",
+    "Princess on Holiday": "公主假日",
+    "Seashade Pas Seul": "影池獨舞",
+    "Shade of Leisure": "暇時閒影"
   }
 }
