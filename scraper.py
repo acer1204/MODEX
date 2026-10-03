@@ -22,6 +22,8 @@ HEADERS = {
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     )
 }
+# Image downloads also need a Referer, or the Fandom CDN answers 403.
+IMG_HEADERS = {**HEADERS, "Referer": "https://www.fandom.com/"}
 
 
 def _clean_icon_url(url: str, width: int = 256) -> str:
@@ -113,7 +115,9 @@ def download_icon(url: str, dest_path: str, retries: int = 3) -> bool:
     tmp = dest_path + ".part"
     for attempt in range(retries):
         try:
-            r = requests.get(url, headers=HEADERS, timeout=60)
+            # Fandom's image CDN (static.wikia.nocookie.net) rejects requests
+            # without a Referer (hotlink protection) with HTTP 403.
+            r = requests.get(url, headers=IMG_HEADERS, timeout=60)
             r.raise_for_status()
             if not r.content:
                 raise ValueError("empty response")

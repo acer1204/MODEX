@@ -12,6 +12,7 @@ const ELEMENT_COLORS = {
 const ATTR_COLORS = {
   Electric: "#c9e35a", Fire: "#ff7a59", Ice: "#7fe7ff", Frost: "#9fd0ff",
   Ether: "#e07ad0", Physical: "#cdd3e0", "Auric Ink": "#e0c060", "Honed Edge": "#7fe7c0",
+  Wind: "#6fe7b7", Lumiflux: "#f3e3a2",
 };
 function facetColor(key, value) {
   if (key === "element") return ELEMENT_COLORS[value] || null;
